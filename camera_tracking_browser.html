@@ -151,19 +151,27 @@
     ];
 
     const landmarkLabels = {
-      0: { title: 'Kepala', subtitle: 'Saraf Trigeminal, Tulang Hidung' },
-      11: { title: 'Bahu Kiri', subtitle: 'Sendi Bahu, Plexus Brachialis' },
-      12: { title: 'Bahu Kanan', subtitle: 'Sendi Bahu, Plexus Brachialis' },
-      13: { title: 'Siku Kiri', subtitle: 'Sendi Siku, Saraf Radial/Ulnar' },
-      14: { title: 'Siku Kanan', subtitle: 'Sendi Siku, Saraf Radial/Ulnar' },
-      15: { title: 'Pergelangan Kiri', subtitle: 'Sendi Pergelangan, Saraf Median' },
-      16: { title: 'Pergelangan Kanan', subtitle: 'Sendi Pergelangan, Saraf Median' },
-      17: { title: 'Jari Kelingking Kiri', subtitle: 'Sendi Interfalangeal, Saraf Ulnar' },
-      18: { title: 'Jari Kelingking Kanan', subtitle: 'Sendi Interfalangeal, Saraf Ulnar' },
-      19: { title: 'Jari Telunjuk Kiri', subtitle: 'Sendi Interfalangeal, Saraf Median' },
-      20: { title: 'Jari Telunjuk Kanan', subtitle: 'Sendi Interfalangeal, Saraf Median' },
-      21: { title: 'Jempol Kiri', subtitle: 'Sendi Carpometacarpal, Saraf Median' },
-      22: { title: 'Jempol Kanan', subtitle: 'Sendi Carpometacarpal, Saraf Median' }
+      0: { title: 'Hidung', subtitle: 'Tulang Hidung, Saraf Trigeminal' },
+      7: { title: 'Telinga Kiri', subtitle: 'Tulang Temporal, Saraf Kranial' },
+      8: { title: 'Telinga Kanan', subtitle: 'Tulang Temporal, Saraf Kranial' },
+      11: { title: 'Bahu Kiri', subtitle: 'Sendi Peluru, Clavicula & Scapula' },
+      12: { title: 'Bahu Kanan', subtitle: 'Sendi Peluru, Clavicula & Scapula' },
+      13: { title: 'Siku Kiri', subtitle: 'Sendi Engsel, Saraf Radial/Ulnar' },
+      14: { title: 'Siku Kanan', subtitle: 'Sendi Engsel, Saraf Radial/Ulnar' },
+      15: { title: 'Pergelangan Kiri', subtitle: 'Sendi Geser, Saraf Median' },
+      16: { title: 'Pergelangan Kanan', subtitle: 'Sendi Geser, Saraf Median' },
+      17: { title: 'Jari Kelingking Kiri', subtitle: 'Falanges, Saraf Ulnaris' },
+      18: { title: 'Jari Kelingking Kanan', subtitle: 'Falanges, Saraf Ulnaris' },
+      19: { title: 'Jari Telunjuk Kiri', subtitle: 'Falanges, Saraf Medianus' },
+      20: { title: 'Jari Telunjuk Kanan', subtitle: 'Falanges, Saraf Medianus' },
+      21: { title: 'Jempol Kiri', subtitle: 'Sendi Pelana, Saraf Medianus' },
+      22: { title: 'Jempol Kanan', subtitle: 'Sendi Pelana, Saraf Medianus' },
+      23: { title: 'Panggul Kiri', subtitle: 'Os Coxae, Plexus Lumbalis' },
+      24: { title: 'Panggul Kanan', subtitle: 'Os Coxae, Plexus Lumbalis' },
+      25: { title: 'Lutut Kiri', subtitle: 'Sendi Engsel, Patella, Saraf Femoralis' },
+      26: { title: 'Lutut Kanan', subtitle: 'Sendi Engsel, Patella, Saraf Femoralis' },
+      27: { title: 'Pergelangan Kaki Kiri', subtitle: 'Sendi Engsel, Saraf Tibialis' },
+      28: { title: 'Pergelangan Kaki Kanan', subtitle: 'Sendi Engsel, Saraf Tibialis' }
     };
 
     function toCanvasPoint(landmark) {
@@ -263,7 +271,7 @@
         drawConnectors(canvasCtx, mirroredLandmarks, POSE_CONNECTIONS, { color: 'rgba(255,255,255,0.25)', lineWidth: 2 });
         drawNerveLines(mirroredLandmarks);
         drawLandmarks(canvasCtx, mirroredLandmarks, { color: '#fff', lineWidth: 1, radius: 2 });
-        [0, 11, 12, 13, 14, 15, 16, 17, 18, 23, 24, 25, 26, 27, 28].forEach((index) => {
+        [0, 7, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28].forEach((index) => {
           drawGlowPoint(toCanvasPoint(mirroredLandmarks[index]), '#ff4d6d', 5);
         });
         drawLabelSet(mirroredLandmarks);

@@ -1,9 +1,20 @@
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
-$prefix = 'http://localhost:8000/'
+$prefix = 'http://+:8080/'
 $listener = New-Object System.Net.HttpListener
 $listener.Prefixes.Add($prefix)
-$listener.Start()
+try {
+    $listener.Start()
+} catch {
+    Write-Host "ERROR: Tidak dapat memulai server pada $prefix."
+    Write-Host "Pesan kesalahan: $($_.Exception.Message)"
+    Write-Host "Jika Anda tidak menjalankan PowerShell sebagai administrator, jalankan perintah ini dahulu:" 
+    Write-Host "  netsh http add urlacl url=http://+:8080/ user=Everyone"
+    Write-Host "Lalu jalankan kembali skrip ini."
+    exit 1
+}
 Write-Host "Serving $root at $prefix"
+Write-Host "Akses halaman di browser lokal: http://localhost:8080/camera_tracking_browser.html"
+Write-Host "Jika menggunakan ngrok, jalankan: ngrok http 8080"
 while ($listener.IsListening) {
     $context = $listener.GetContext()
     $requestPath = [System.Uri]::UnescapeDataString($context.Request.Url.AbsolutePath.TrimStart('/'))

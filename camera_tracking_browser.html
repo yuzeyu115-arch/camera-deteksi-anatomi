@@ -35,11 +35,11 @@
       box-shadow: 0 30px 90px rgba(0, 0, 0, 0.45);
     }
     video {
-      display: block;
-      width: 100%;
-      height: auto;
-      border-radius: 30px;
-      margin-bottom: 12px;
+      position: absolute;
+      left: -9999px;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
     }
     canvas {
       width: 100%;
@@ -112,7 +112,6 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
   <script>
     const videoElement = document.getElementById('input_video');
@@ -121,8 +120,9 @@
     const statusElement = document.getElementById('status');
     const startBtn = document.getElementById('startBtn');
     const stopBtn = document.getElementById('stopBtn');
-    let camera = null;
+    let mediaStream = null;
     let isRunning = false;
+    let animationFrameId = null;
 
     function updateStatus(message, isError = false) {
       statusElement.textContent = message;
@@ -148,25 +148,37 @@
 
     async function startFallbackCamera() {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
-        videoElement.srcObject = stream;
+        mediaStream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
+        videoElement.srcObject = mediaStream;
         videoElement.muted = true;
         await videoElement.play();
         isRunning = true;
         setButtons();
-        updateStatus('Kamera langsung aktif. Deteksi pose mungkin tidak tersedia.');
-        requestAnimationFrame(function drawFrame() {
-          if (!isRunning) return;
-          if (videoElement.readyState >= 2) {
-            canvasElement.width = videoElement.videoWidth;
-            canvasElement.height = videoElement.videoHeight;
-            canvasCtx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
-          }
-          requestAnimationFrame(drawFrame);
-        });
+        updateStatus('Kamera langsung aktif. Live tracking berjalan.');
+        startLiveProcessing();
       } catch (error) {
         updateStatus('Gagal membuka kamera langsung: ' + (error.message || error), true);
       }
+    }
+
+    function startLiveProcessing() {
+      if (!isRunning) return;
+      if (pose && typeof pose.send === 'function') {
+        pose.send({ image: videoElement });
+      } else {
+        drawVideoFrame();
+      }
+    }
+
+    function drawVideoFrame() {
+      if (!isRunning) return;
+      if (videoElement.videoWidth && videoElement.videoHeight) {
+        canvasElement.width = videoElement.videoWidth;
+        canvasElement.height = videoElement.videoHeight;
+        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+        canvasCtx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
+      }
+      animationFrameId = requestAnimationFrame(drawVideoFrame);
     }
 
     const nerveConnections = [
@@ -209,10 +221,7 @@
     }
 
     function mirrorLandmarks(landmarks) {
-      return landmarks.map((landmark) => ({
-        ...landmark,
-        x: 1 - landmark.x
-      }));
+      return landmarks;
     }
 
     function drawGlowPoint(point, color = '#ff4d6d', radius = 5) {
@@ -273,8 +282,8 @@
         drawLabel(point, label.title, label.subtitle);
       });
 
-      const leftShoulder = toCanvasPoint(landmarks[7]);
-      const rightShoulder = toCanvasPoint(landmarks[8]);
+      const leftShoulder = toCanvasPoint(landmarks[11]);
+      const rightShoulder = toCanvasPoint(landmarks[12]);
       const neckPoint = {
         x: (leftShoulder.x + rightShoulder.x) / 2,
         y: (leftShoulder.y + rightShoulder.y) / 2 - 48
@@ -286,26 +295,25 @@
       if (!results.image) return;
       canvasElement.width = results.image.width;
       canvasElement.height = results.image.height;
-      canvasCtx.save();
       canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-      canvasCtx.translate(canvasElement.width, 0);
-      canvasCtx.scale(-1, 1);
       canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
-      canvasCtx.restore();
 
       if (results.poseLandmarks) {
-        const mirroredLandmarks = mirrorLandmarks(results.poseLandmarks);
-        drawConnectors(canvasCtx, mirroredLandmarks, POSE_CONNECTIONS, { color: 'rgba(255,255,255,0.25)', lineWidth: 2 });
-        drawNerveLines(mirroredLandmarks);
-        drawLandmarks(canvasCtx, mirroredLandmarks, { color: '#fff', lineWidth: 1, radius: 2 });
+        const landmarks = results.poseLandmarks;
+        drawConnectors(canvasCtx, landmarks, POSE_CONNECTIONS, { color: 'rgba(255,255,255,0.25)', lineWidth: 2 });
+        drawNerveLines(landmarks);
+        drawLandmarks(canvasCtx, landmarks, { color: '#fff', lineWidth: 1, radius: 2 });
         [0, 7, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28].forEach((index) => {
-          drawGlowPoint(toCanvasPoint(mirroredLandmarks[index]), '#ff4d6d', 5);
+          if (landmarks[index]) {
+            drawGlowPoint(toCanvasPoint(landmarks[index]), '#ff4d6d', 5);
+          }
         });
-        drawLabelSet(mirroredLandmarks);
+        drawLabelSet(landmarks);
         updateStatus('Audience terdeteksi. Titik dan garis saraf mengikuti gerakan.');
       } else {
         updateStatus('Tidak ada audience yang terdeteksi. Silakan masuk ke frame kamera.');
       }
+      animationFrameId = requestAnimationFrame(startLiveProcessing);
     }
 
     let pose = null;
@@ -343,49 +351,44 @@
         return;
       }
 
-      if (typeof Camera === 'undefined') {
-        updateStatus('MediaPipe Camera tidak tersedia, menggunakan kamera langsung.', false);
-        await startFallbackCamera();
-        return;
-      }
-
       videoElement.muted = true;
-      videoElement.style.display = 'block';
-      videoElement.addEventListener('loadeddata', () => {
-        updateStatus('Kamera terhubung. Menunggu proses frame...');
-      }, { once: true });
 
       try {
-        camera = new Camera(videoElement, {
-          onFrame: async () => {
-            if (pose && typeof pose.send === 'function') {
-              await pose.send({ image: videoElement });
-            }
-          },
-          width: 1280,
-          height: 720
-        });
-        await camera.start();
+        mediaStream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
+        videoElement.srcObject = mediaStream;
+        await videoElement.play();
+        if (videoElement.readyState < 2) {
+          await new Promise((resolve) => {
+            videoElement.addEventListener('loadeddata', resolve, { once: true });
+          });
+        }
+        await new Promise((resolve) => setTimeout(resolve, 200));
+
         isRunning = true;
         setButtons();
-        updateStatus('Kamera aktif. Deteksi pose dan garis saraf berjalan.');
+        updateStatus('Kamera aktif. Live tracking berjalan...');
+
+        startLiveProcessing();
       } catch (error) {
         console.error('camera start error', error);
         const message = error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError'
-          ? 'Izin kamera ditolak. Periksa pengaturan browser untuk localhost:8000 dan izinkan akses kamera.'
+          ? 'Izin kamera ditolak. Periksa pengaturan kamera di origin ini.'
           : 'Gagal mengaktifkan kamera: ' + (error.message || error);
         updateStatus(message, true);
-        await startFallbackCamera();
+        stopCamera();
       }
     }
 
     function stopCamera() {
-      if (camera) {
-        camera.stop();
-        camera = null;
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
+      }
+      if (mediaStream) {
+        mediaStream.getTracks().forEach((track) => track.stop());
+        mediaStream = null;
       }
       if (videoElement.srcObject) {
-        videoElement.srcObject.getTracks().forEach((track) => track.stop());
         videoElement.srcObject = null;
       }
       isRunning = false;

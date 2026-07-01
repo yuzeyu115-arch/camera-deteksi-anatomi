@@ -35,7 +35,11 @@
       box-shadow: 0 30px 90px rgba(0, 0, 0, 0.45);
     }
     video {
-      display: none;
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: 30px;
+      margin-bottom: 12px;
     }
     canvas {
       width: 100%;
@@ -96,7 +100,7 @@
   <div class="container">
     <div class="title">Camera Live Tracking - Audience Pose</div>
     <div class="video-card">
-      <video id="input_video" playsinline></video>
+      <video id="input_video" playsinline autoplay muted></video>
       <canvas id="output_canvas"></canvas>
       <div id="status" class="overlay">Klik "Mulai Kamera" untuk mengaktifkan kamera.</div>
     </div>
@@ -139,6 +143,29 @@
       } catch (error) {
         console.warn('Permission API tidak tersedia untuk camera', error);
         return 'unknown';
+      }
+    }
+
+    async function startFallbackCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
+        videoElement.srcObject = stream;
+        videoElement.muted = true;
+        await videoElement.play();
+        isRunning = true;
+        setButtons();
+        updateStatus('Kamera langsung aktif. Deteksi pose mungkin tidak tersedia.');
+        requestAnimationFrame(function drawFrame() {
+          if (!isRunning) return;
+          if (videoElement.readyState >= 2) {
+            canvasElement.width = videoElement.videoWidth;
+            canvasElement.height = videoElement.videoHeight;
+            canvasCtx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
+          }
+          requestAnimationFrame(drawFrame);
+        });
+      } catch (error) {
+        updateStatus('Gagal membuka kamera langsung: ' + (error.message || error), true);
       }
     }
 
@@ -281,17 +308,22 @@
       }
     }
 
-    const pose = new Pose({
-      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
-    });
+    let pose = null;
+    if (typeof Pose !== 'undefined') {
+      pose = new Pose({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+      });
 
-    pose.setOptions({
-      modelComplexity: 1,
-      smoothLandmarks: true,
-      minDetectionConfidence: 0.6,
-      minTrackingConfidence: 0.6
-    });
-    pose.onResults(onResults);
+      pose.setOptions({
+        modelComplexity: 1,
+        smoothLandmarks: true,
+        minDetectionConfidence: 0.6,
+        minTrackingConfidence: 0.6
+      });
+      pose.onResults(onResults);
+    } else {
+      updateStatus('Library MediaPipe tidak bisa dimuat. Kamera tetap bisa dipakai dalam mode langsung.', false);
+    }
 
     async function startCamera() {
       const permState = await getCameraPermissionState();
@@ -312,14 +344,23 @@
       }
 
       if (typeof Camera === 'undefined') {
-        updateStatus('Gagal memuat MediaPipe Camera. Muat ulang halaman dan pastikan koneksi internet aktif.', true);
+        updateStatus('MediaPipe Camera tidak tersedia, menggunakan kamera langsung.', false);
+        await startFallbackCamera();
         return;
       }
+
+      videoElement.muted = true;
+      videoElement.style.display = 'block';
+      videoElement.addEventListener('loadeddata', () => {
+        updateStatus('Kamera terhubung. Menunggu proses frame...');
+      }, { once: true });
 
       try {
         camera = new Camera(videoElement, {
           onFrame: async () => {
-            await pose.send({ image: videoElement });
+            if (pose && typeof pose.send === 'function') {
+              await pose.send({ image: videoElement });
+            }
           },
           width: 1280,
           height: 720
@@ -334,6 +375,7 @@
           ? 'Izin kamera ditolak. Periksa pengaturan browser untuk localhost:8000 dan izinkan akses kamera.'
           : 'Gagal mengaktifkan kamera: ' + (error.message || error);
         updateStatus(message, true);
+        await startFallbackCamera();
       }
     }
 
@@ -341,6 +383,10 @@
       if (camera) {
         camera.stop();
         camera = null;
+      }
+      if (videoElement.srcObject) {
+        videoElement.srcObject.getTracks().forEach((track) => track.stop());
+        videoElement.srcObject = null;
       }
       isRunning = false;
       setButtons();

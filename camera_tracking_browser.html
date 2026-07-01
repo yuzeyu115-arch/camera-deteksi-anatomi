@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Camera Pose Tracking</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #121212;
+      color: #fff;
+      font-family: 'Poppins', Arial, sans-serif;
+    }
+    .container {
+      width: min(100%, 1080px);
+      padding: 16px;
+      box-sizing: border-box;
+    }
+    .title {
+      text-align: center;
+      margin-bottom: 16px;
+      font-size: 24px;
+      font-weight: 700;
+    }
+    .video-card {
+      position: relative;
+      border-radius: 30px;
+      overflow: hidden;
+      background: linear-gradient(180deg, #1e1b2e 0%, #11101c 100%);
+      box-shadow: 0 30px 90px rgba(0, 0, 0, 0.45);
+    }
+    video {
+      display: none;
+    }
+    canvas {
+      width: 100%;
+      height: auto;
+      display: block;
+      background: #000;
+    }
+    .overlay {
+      position: absolute;
+      left: 16px;
+      right: 16px;
+      bottom: 18px;
+      padding: 14px 18px;
+      border-radius: 24px;
+      box-sizing: border-box;
+      backdrop-filter: blur(12px);
+      background: rgba(18, 18, 18, 0.75);
+      color: #fff;
+      font-size: 16px;
+      text-align: center;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .buttons {
+      display: flex;
+      gap: 12px;
+      margin-top: 16px;
+      justify-content: center;
+    }
+    button {
+      border: none;
+      border-radius: 999px;
+      padding: 12px 24px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    button:hover { transform: translateY(-1px); }
+    .button-start {
+      background: #6d5cff;
+      color: #fff;
+      box-shadow: 0 12px 32px rgba(109, 92, 255, 0.3);
+    }
+    .button-pause {
+      background: #2b2b2b;
+      color: #fff;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+    }
+    .footer {
+      margin-top: 16px;
+      text-align: center;
+      color: #aaa;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="title">Camera Live Tracking - Audience Pose</div>
+    <div class="video-card">
+      <video id="input_video" playsinline></video>
+      <canvas id="output_canvas"></canvas>
+      <div id="status" class="overlay">Klik "Mulai Kamera" untuk mengaktifkan kamera.</div>
+    </div>
+    <div class="buttons">
+      <button id="startBtn" class="button-start">Mulai Kamera</button>
+      <button id="stopBtn" class="button-pause">Berhenti</button>
+    </div>
+    <div class="footer">Audience dideteksi, titik dan garis saraf mengikuti gerakan tubuh.</div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+  <script>
+    const videoElement = document.getElementById('input_video');
+    const canvasElement = document.getElementById('output_canvas');
+    const canvasCtx = canvasElement.getContext('2d');
+    const statusElement = document.getElementById('status');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    let camera = null;
+    let isRunning = false;
+
+    function updateStatus(message, isError = false) {
+      statusElement.textContent = message;
+      statusElement.style.color = isError ? '#ff8080' : '#ffffff';
+      console.log('[STATUS]', message);
+    }
+
+    function setButtons() {
+      startBtn.textContent = isRunning ? 'Jeda' : 'Mulai Kamera';
+      stopBtn.disabled = !isRunning;
+    }
+
+    async function getCameraPermissionState() {
+      if (!navigator.permissions || !navigator.permissions.query) return 'unknown';
+      try {
+        const permission = await navigator.permissions.query({ name: 'camera' });
+        return permission.state;
+      } catch (error) {
+        console.warn('Permission API tidak tersedia untuk camera', error);
+        return 'unknown';
+      }
+    }
+
+    const nerveConnections = [
+      [11, 13], [13, 15], [12, 14], [14, 16],
+      [11, 23], [12, 24], [23, 24],
+      [23, 25], [24, 26], [25, 27], [26, 28],
+      [11, 12], [23, 24],
+      [0, 1], [1, 2], [2, 3], [3, 7], [0, 4], [4, 5], [5, 6], [6, 8]
+    ];
+
+    const landmarkLabels = {
+      0: { title: 'Kepala', subtitle: 'Saraf Trigeminal, Tulang Hidung' },
+      11: { title: 'Bahu Kiri', subtitle: 'Sendi Bahu, Plexus Brachialis' },
+      12: { title: 'Bahu Kanan', subtitle: 'Sendi Bahu, Plexus Brachialis' },
+      13: { title: 'Siku Kiri', subtitle: 'Sendi Siku, Saraf Radial/Ulnar' },
+      14: { title: 'Siku Kanan', subtitle: 'Sendi Siku, Saraf Radial/Ulnar' },
+      15: { title: 'Pergelangan Kiri', subtitle: 'Sendi Pergelangan, Saraf Median' },
+      16: { title: 'Pergelangan Kanan', subtitle: 'Sendi Pergelangan, Saraf Median' },
+      17: { title: 'Jari Kelingking Kiri', subtitle: 'Sendi Interfalangeal, Saraf Ulnar' },
+      18: { title: 'Jari Kelingking Kanan', subtitle: 'Sendi Interfalangeal, Saraf Ulnar' },
+      19: { title: 'Jari Telunjuk Kiri', subtitle: 'Sendi Interfalangeal, Saraf Median' },
+      20: { title: 'Jari Telunjuk Kanan', subtitle: 'Sendi Interfalangeal, Saraf Median' },
+      21: { title: 'Jempol Kiri', subtitle: 'Sendi Carpometacarpal, Saraf Median' },
+      22: { title: 'Jempol Kanan', subtitle: 'Sendi Carpometacarpal, Saraf Median' }
+    };
+
+    function toCanvasPoint(landmark) {
+      return {
+        x: landmark.x * canvasElement.width,
+        y: landmark.y * canvasElement.height
+      };
+    }
+
+    function mirrorLandmarks(landmarks) {
+      return landmarks.map((landmark) => ({
+        ...landmark,
+        x: 1 - landmark.x
+      }));
+    }
+
+    function drawGlowPoint(point, color = '#ff4d6d', radius = 5) {
+      const gradient = canvasCtx.createRadialGradient(point.x, point.y, 1, point.x, point.y, radius * 2);
+      gradient.addColorStop(0, color);
+      gradient.addColorStop(0.4, 'rgba(255,77,109,0.8)');
+      gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      canvasCtx.beginPath();
+      canvasCtx.fillStyle = gradient;
+      canvasCtx.arc(point.x, point.y, radius * 2, 0, Math.PI * 2);
+      canvasCtx.fill();
+      canvasCtx.beginPath();
+      canvasCtx.fillStyle = '#fff';
+      canvasCtx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+      canvasCtx.fill();
+    }
+
+    function drawNerveLines(landmarks) {
+      canvasCtx.save();
+      canvasCtx.lineWidth = 3;
+      canvasCtx.shadowColor = 'rgba(124, 252, 0, 0.55)';
+      canvasCtx.shadowBlur = 16;
+      nerveConnections.forEach(([i, j]) => {
+        const a = toCanvasPoint(landmarks[i]);
+        const b = toCanvasPoint(landmarks[j]);
+        const gradient = canvasCtx.createLinearGradient(a.x, a.y, b.x, b.y);
+        gradient.addColorStop(0, 'rgba(124,252,0,0.9)');
+        gradient.addColorStop(1, 'rgba(255,77,109,0.9)');
+        canvasCtx.strokeStyle = gradient;
+        canvasCtx.beginPath();
+        canvasCtx.moveTo(a.x, a.y);
+        canvasCtx.lineTo(b.x, b.y);
+        canvasCtx.stroke();
+      });
+      canvasCtx.restore();
+    }
+
+    function drawLabel(point, title, subtitle) {
+      const padding = 6;
+      const lineHeight = 18;
+      const lines = [title, subtitle];
+      canvasCtx.font = '600 14px Poppins, sans-serif';
+      const maxTextWidth = Math.max(...lines.map((line) => canvasCtx.measureText(line).width));
+      const x = point.x > canvasElement.width * 0.65 ? point.x - maxTextWidth - 16 : point.x + 14;
+      const y = Math.max(16, Math.min(canvasElement.height - lineHeight * lines.length - 10, point.y - lineHeight));
+
+      canvasCtx.fillStyle = '#ffffff';
+      lines.forEach((line, index) => {
+        canvasCtx.fillText(line, x, y + index * lineHeight);
+      });
+    }
+
+    function drawLabelSet(landmarks) {
+      Object.entries(landmarkLabels).forEach(([index, label]) => {
+        const landmark = landmarks[index];
+        if (!landmark) return;
+        const point = toCanvasPoint(landmark);
+        drawLabel(point, label.title, label.subtitle);
+      });
+
+      const leftShoulder = toCanvasPoint(landmarks[7]);
+      const rightShoulder = toCanvasPoint(landmarks[8]);
+      const neckPoint = {
+        x: (leftShoulder.x + rightShoulder.x) / 2,
+        y: (leftShoulder.y + rightShoulder.y) / 2 - 48
+      };
+      drawLabel(neckPoint, 'Leher', 'Saraf Leher, Sendi Kervikal');
+    }
+
+    function onResults(results) {
+      if (!results.image) return;
+      canvasElement.width = results.image.width;
+      canvasElement.height = results.image.height;
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+      canvasCtx.translate(canvasElement.width, 0);
+      canvasCtx.scale(-1, 1);
+      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+      canvasCtx.restore();
+
+      if (results.poseLandmarks) {
+        const mirroredLandmarks = mirrorLandmarks(results.poseLandmarks);
+        drawConnectors(canvasCtx, mirroredLandmarks, POSE_CONNECTIONS, { color: 'rgba(255,255,255,0.25)', lineWidth: 2 });
+        drawNerveLines(mirroredLandmarks);
+        drawLandmarks(canvasCtx, mirroredLandmarks, { color: '#fff', lineWidth: 1, radius: 2 });
+        [0, 11, 12, 13, 14, 15, 16, 17, 18, 23, 24, 25, 26, 27, 28].forEach((index) => {
+          drawGlowPoint(toCanvasPoint(mirroredLandmarks[index]), '#ff4d6d', 5);
+        });
+        drawLabelSet(mirroredLandmarks);
+        updateStatus('Audience terdeteksi. Titik dan garis saraf mengikuti gerakan.');
+      } else {
+        updateStatus('Tidak ada audience yang terdeteksi. Silakan masuk ke frame kamera.');
+      }
+    }
+
+    const pose = new Pose({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+    });
+
+    pose.setOptions({
+      modelComplexity: 1,
+      smoothLandmarks: true,
+      minDetectionConfidence: 0.6,
+      minTrackingConfidence: 0.6
+    });
+    pose.onResults(onResults);
+
+    async function startCamera() {
+      const permState = await getCameraPermissionState();
+      if (permState === 'denied') {
+        updateStatus('Akses kamera diblokir. Buka ikon gembok di address bar dan izinkan kamera untuk localhost:8000.', true);
+        return;
+      }
+
+      if (isRunning) {
+        stopCamera();
+        updateStatus('Kamera dijeda. Klik Mulai Kamera untuk melanjutkan.');
+        return;
+      }
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        updateStatus('Browser tidak mendukung akses kamera. Gunakan Chrome atau Edge terbaru.', true);
+        return;
+      }
+
+      if (typeof Camera === 'undefined') {
+        updateStatus('Gagal memuat MediaPipe Camera. Muat ulang halaman dan pastikan koneksi internet aktif.', true);
+        return;
+      }
+
+      try {
+        camera = new Camera(videoElement, {
+          onFrame: async () => {
+            await pose.send({ image: videoElement });
+          },
+          width: 1280,
+          height: 720
+        });
+        await camera.start();
+        isRunning = true;
+        setButtons();
+        updateStatus('Kamera aktif. Deteksi pose dan garis saraf berjalan.');
+      } catch (error) {
+        console.error('camera start error', error);
+        const message = error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError'
+          ? 'Izin kamera ditolak. Periksa pengaturan browser untuk localhost:8000 dan izinkan akses kamera.'
+          : 'Gagal mengaktifkan kamera: ' + (error.message || error);
+        updateStatus(message, true);
+      }
+    }
+
+    function stopCamera() {
+      if (camera) {
+        camera.stop();
+        camera = null;
+      }
+      isRunning = false;
+      setButtons();
+      updateStatus('Kamera berhenti. Klik Mulai Kamera untuk memulai ulang.');
+    }
+
+    startBtn.addEventListener('click', startCamera);
+    stopBtn.addEventListener('click', stopCamera);
+    setButtons();
+  </script>
+</body>
+</html>

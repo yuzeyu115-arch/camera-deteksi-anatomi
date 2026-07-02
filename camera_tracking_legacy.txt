@@ -1,0 +1,1 @@
+# camera_tracking_legacy.txt\n\nFile ini merupakan versi lama Python.\nAplikasi sekarang sepenuhnya menggunakan JavaScript di browser, dengan logika di camera_tracking.js.\nTidak perlu menjalankan Python untuk menggunakan proyek ini.

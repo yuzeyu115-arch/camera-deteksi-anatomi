@@ -1,0 +1,1 @@
+{"name":"camera-deteksi-anatomi","version":"1.0.0","description":"Browser-based anatomy pose tracking app","private":true,"scripts":{"start":"echo Open camera_tracking_browser.html in browser"},"dependencies":{}}

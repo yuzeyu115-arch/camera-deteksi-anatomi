@@ -1,0 +1,1 @@
+# deploy-static-site-legacy.txt\n\nFile ini merupakan versi workflow yang dibuat saat mengonversi proyek ke JavaScript.\nGunakan .github/workflows/deploy.yml sebagai workflow aktif untuk deploy situs statis.

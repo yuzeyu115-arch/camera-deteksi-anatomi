@@ -18,6 +18,7 @@ const savedContainer = document.getElementById('savedContainer');
 const clearSavedBtn = document.getElementById('clearSavedBtn');
 const exportRefsBtn = document.getElementById('exportRefsBtn');
 const importRefsInput = document.getElementById('importRefsInput');
+const forceNoMirrorBtn = document.getElementById('forceNoMirrorBtn');
 let mediaStream = null;
 let isRunning = false;
 let animationFrameId = null;
@@ -356,17 +357,18 @@ function onResults(results) {
   if (!results.image) return;
   canvasElement.width = results.image.width;
   canvasElement.height = results.image.height;
+  // apply transform first so image and annotations share same orientation
+  canvasCtx.save();
+  if (mirrorCanvas) {
+    canvasCtx.setTransform(-1, 0, 0, 1, canvasElement.width, 0);
+  } else {
+    canvasCtx.setTransform(1, 0, 0, 1, 0, 0);
+  }
   canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
   canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
   if (results.poseLandmarks) {
     const landmarks = results.poseLandmarks;
-    // ensure no mirroring when drawing results
-    if (mirrorCanvas) {
-      canvasCtx.setTransform(-1, 0, 0, 1, canvasElement.width, 0);
-    } else {
-      canvasCtx.setTransform(1, 0, 0, 1, 0, 0);
-    }
     drawConnectors(canvasCtx, landmarks, POSE_CONNECTIONS, { color: 'rgba(255,255,255,0.25)', lineWidth: 2 });
     drawNerveLines(landmarks);
     drawLandmarks(canvasCtx, landmarks, { color: '#fff', lineWidth: 1, radius: 2 });
@@ -382,7 +384,10 @@ function onResults(results) {
       const percent = computePoseSimilarity(referenceLandmarks, landmarks);
       updateAccuracyDisplay(percent);
     }
+    canvasCtx.restore();
   } else {
+    // restore transform even when no landmarks
+    canvasCtx.restore();
     updateStatus('Tidak ada audience yang terdeteksi. Silakan masuk ke frame kamera.');
   }
   animationFrameId = requestAnimationFrame(startLiveProcessing);
@@ -430,6 +435,8 @@ function renderThumbnails(files) {
       Array.from(thumbnailsContainer.children).forEach((c) => c.style.outline = '');
       img.style.outline = '3px solid rgba(109,92,255,0.6)';
       selectedRefIndex = idx;
+      // immediately load the selected file as active reference
+      try { loadReferenceFromFile(file); } catch (e) { console.warn('Failed to load thumbnail file', e); }
     });
     thumbnailsContainer.appendChild(img);
   });
@@ -483,7 +490,19 @@ if (thresholdSlider && thresholdLabel) {
 }
 
 if (mirrorToggle) {
-  mirrorToggle.addEventListener('change', (e) => { mirrorCanvas = !!e.target.checked; });
+  mirrorToggle.addEventListener('change', (e) => {
+    mirrorCanvas = !!e.target.checked;
+    try { localStorage.setItem('mirrorPref', mirrorCanvas ? 'true' : 'false'); } catch (err) { console.warn('mirror save failed', err); }
+  });
+}
+
+if (forceNoMirrorBtn) {
+  forceNoMirrorBtn.addEventListener('click', () => {
+    mirrorCanvas = false;
+    if (mirrorToggle) mirrorToggle.checked = false;
+    try { localStorage.setItem('mirrorPref', 'false'); } catch (err) { console.warn('mirror save failed', err); }
+    updateStatus('Mode non-mirror dipaksa dan disimpan sebagai preferensi.', false);
+  });
 }
 
 if (saveRefBtn) saveRefBtn.addEventListener('click', saveCurrentReferenceToLocal);
@@ -495,6 +514,17 @@ if (importRefsInput) importRefsInput.addEventListener('change', (e) => {
 
 // load saved refs on startup
 try { renderSavedRefs(); } catch (e) { console.warn('renderSavedRefs failed', e); }
+
+// initialize UI state
+if (thresholdLabel) thresholdLabel.textContent = `${similarityThreshold}%`;
+// load mirror preference from localStorage
+try {
+  const savedMirror = localStorage.getItem('mirrorPref');
+  if (savedMirror !== null) {
+    mirrorCanvas = savedMirror === 'true';
+  }
+} catch (e) { console.warn('localStorage mirror read failed', e); }
+if (mirrorToggle) mirrorToggle.checked = !!mirrorCanvas;
 
 async function startCamera() {
   const permState = await getCameraPermissionState();
@@ -573,24 +603,4 @@ startBtn.addEventListener('click', startCamera);
 stopBtn.addEventListener('click', stopCamera);
 setButtons();
 
-// reference upload / set handlers
-if (setRefBtn) {
-  setRefBtn.addEventListener('click', () => {
-    if (!refUpload || !refUpload.files || refUpload.files.length === 0) {
-      updateStatus('Pilih file foto terlebih dahulu.', true);
-      return;
-    }
-    const file = refUpload.files[0];
-    const img = new Image();
-    img.onload = () => {
-      referenceImage = img;
-      if (poseRef && typeof poseRef.send === 'function') {
-        poseRef.send({ image: img });
-      } else {
-        updateStatus('Pose reference tidak tersedia.', true);
-      }
-    };
-    img.onerror = () => updateStatus('Gagal memuat foto referensi.', true);
-    img.src = URL.createObjectURL(file);
-  });
-}
+// setRefBtn handled earlier (loads selected thumbnail)

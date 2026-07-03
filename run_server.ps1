@@ -13,7 +13,12 @@ function Start-LocalServer {
 function Open-Browser {
     param($url)
     Write-Host "Membuka browser: $url"
-    Start-Process $url
+    try {
+        Start-Process -FilePath 'chrome' -ArgumentList $url
+    } catch {
+        # fallback to default browser
+        Start-Process $url
+    }
 }
 
 $listener = $null

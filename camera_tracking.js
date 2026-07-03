@@ -547,14 +547,14 @@ async function startCamera() {
   videoElement.muted = true;
 
   try {
-    const aspect = window.innerWidth / Math.max(1, window.innerHeight);
     const isMobile = /Mobi|Android/i.test(navigator.userAgent);
+    const isPortraitPreferred = window.innerHeight >= window.innerWidth;
     const constraints = {
       video: {
-        aspectRatio: aspect,
         facingMode: isMobile ? 'environment' : 'user',
         width: { ideal: isMobile ? 720 : 1280 },
-        height: { ideal: isMobile ? 1280 : 720 }
+        height: { ideal: isMobile ? 1280 : 720 },
+        aspectRatio: isMobile || isPortraitPreferred ? 9 / 16 : 16 / 9
       }
     };
     mediaStream = await navigator.mediaDevices.getUserMedia(constraints);

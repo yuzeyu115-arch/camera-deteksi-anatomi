@@ -102,11 +102,12 @@
       .preview-row {
         flex-direction: column;
       }
-      .buttons {
-        flex-direction: column;
+      .video-card {
+        aspect-ratio: 9 / 16;
       }
-      button {
-        width: 100%;
+      .buttons {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
       }
       .overlay {
         font-size: 14px;
@@ -119,13 +120,13 @@
       .title {
         font-size: 18px;
       }
-      .button-group, .control-row-inner {
+      .button-group,
+      .control-row-inner {
         flex-direction: column;
         align-items: stretch;
       }
-      .button-group button,
-      .button-group label,
-      .controls-row > .control-column {
+      .button-group > *,
+      .buttons > * {
         width: 100%;
       }
     }
@@ -175,14 +176,43 @@
     .control-row-inner {
       display: flex;
       flex-wrap: wrap;
-      gap: 8px;
+      gap: 12px;
       align-items: center;
+      justify-content: space-between;
+    }
+    .control-row-inner > label,
+    .control-row-inner > input,
+    .control-row-inner > div {
+      flex: 1 1 auto;
+      min-width: 0;
     }
     .button-group {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
       align-items: center;
+      justify-items: center;
+    }
+    .button-group > * {
+      min-width: 0;
+      width: 100%;
+      text-align: center;
+    }
+    .button-group label {
+      justify-content: center;
+      width: 100%;
+    }
+    .buttons {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+      justify-items: center;
+      flex-wrap: wrap;
+    }
+    .buttons > * {
+      width: 100%;
+      min-width: 0;
     }
     .preview-row {
       display: flex;
@@ -196,6 +226,7 @@
       gap: 12px;
       margin-top: 16px;
       justify-content: center;
+      flex-wrap: wrap;
     }
     button {
       border: none;
@@ -205,6 +236,7 @@
       font-weight: 600;
       cursor: pointer;
       transition: transform 0.2s ease, box-shadow 0.2s ease;
+      min-width: 160px;
     }
     button:hover { transform: translateY(-1px); }
     .button-start {

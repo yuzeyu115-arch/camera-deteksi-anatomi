@@ -104,6 +104,42 @@
       <canvas id="output_canvas"></canvas>
       <div id="status" class="overlay">Klik "Mulai Kamera" untuk mengaktifkan kamera.</div>
     </div>
+    <div style="display:flex;gap:12px;align-items:center;justify-content:center;margin-top:12px;flex-wrap:wrap;">
+      <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-start;">
+        <label style="color:#ddd;font-size:14px;display:flex;gap:8px;align-items:center;">
+          <input id="refUpload" type="file" accept="image/*" style="display:inline-block;" multiple />
+          <span>Unggah Foto Referensi</span>
+        </label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button id="setRefBtn" class="button-start">Set Foto Referensi</button>
+          <label style="color:#ddd;font-size:14px;display:flex;gap:6px;align-items:center;">Mirror
+            <input id="mirrorToggle" type="checkbox" style="margin-left:6px;" />
+          </label>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <label style="color:#ddd;font-size:14px;">Threshold:</label>
+          <input id="thresholdSlider" type="range" min="10" max="95" value="70" />
+          <div id="thresholdLabel" style="color:#fff;font-weight:600;min-width:60px;text-align:center;">70%</div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;align-items:center;">
+        <div style="display:flex;gap:8px;align-items:center;">
+          <canvas id="refCanvas" width="240" height="180" style="background:#111;border-radius:8px;border:1px solid rgba(255,255,255,0.04);"></canvas>
+          <div id="accuracyResult" style="color:#fff;font-weight:600;min-width:160px;">Belum ada foto referensi.</div>
+        </div>
+        <div id="thumbnailsContainer" style="display:flex;gap:8px;overflow-x:auto;padding:6px;max-width:520px;"></div>
+        <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+          <button id="saveRefBtn" class="button-start">Simpan Referensi</button>
+          <button id="clearSavedBtn" class="button-pause">Hapus Semua Simpanan</button>
+          <button id="exportRefsBtn" class="button-start">Export Preset</button>
+          <label class="button-pause" style="padding:10px 14px;border-radius:999px;cursor:pointer;display:inline-flex;align-items:center;">
+            Import Preset
+            <input id="importRefsInput" type="file" accept="application/json" style="display:none;margin-left:8px;" />
+          </label>
+        </div>
+        <div id="savedContainer" style="display:flex;gap:8px;overflow-x:auto;padding:6px;max-width:520px;margin-top:8px;color:#ccc;"></div>
+      </div>
+    </div>
     <div class="buttons">
       <button id="startBtn" class="button-start">Mulai Kamera</button>
       <button id="stopBtn" class="button-pause">Berhenti</button>

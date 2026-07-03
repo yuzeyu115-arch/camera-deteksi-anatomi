@@ -4,9 +4,30 @@ const canvasCtx = canvasElement.getContext('2d');
 const statusElement = document.getElementById('status');
 const startBtn = document.getElementById('startBtn');
 const stopBtn = document.getElementById('stopBtn');
+const refUpload = document.getElementById('refUpload');
+const setRefBtn = document.getElementById('setRefBtn');
+const refCanvasEl = document.getElementById('refCanvas');
+const refCtx = refCanvasEl ? refCanvasEl.getContext('2d') : null;
+const accuracyResult = document.getElementById('accuracyResult');
+const thumbnailsContainer = document.getElementById('thumbnailsContainer');
+const thresholdSlider = document.getElementById('thresholdSlider');
+const thresholdLabel = document.getElementById('thresholdLabel');
+const mirrorToggle = document.getElementById('mirrorToggle');
+const saveRefBtn = document.getElementById('saveRefBtn');
+const savedContainer = document.getElementById('savedContainer');
+const clearSavedBtn = document.getElementById('clearSavedBtn');
+const exportRefsBtn = document.getElementById('exportRefsBtn');
+const importRefsInput = document.getElementById('importRefsInput');
 let mediaStream = null;
 let isRunning = false;
 let animationFrameId = null;
+let poseRef = null;
+let referenceLandmarks = null;
+let referenceImage = null;
+let references = [];
+let selectedRefIndex = -1;
+let similarityThreshold = 70;
+let mirrorCanvas = false;
 
 function updateStatus(message, isError = false) {
   statusElement.textContent = message;
@@ -44,6 +65,12 @@ function drawVideoFrame() {
   if (videoElement.videoWidth && videoElement.videoHeight) {
     canvasElement.width = videoElement.videoWidth;
     canvasElement.height = videoElement.videoHeight;
+    // apply mirror transform if enabled, otherwise reset
+    if (mirrorCanvas) {
+      canvasCtx.setTransform(-1, 0, 0, 1, canvasElement.width, 0);
+    } else {
+      canvasCtx.setTransform(1, 0, 0, 1, 0, 0);
+    }
     canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
     canvasCtx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
   }
@@ -124,6 +151,175 @@ function drawNerveLines(landmarks) {
   canvasCtx.restore();
 }
 
+function onReferenceResults(results) {
+  if (!results.image) return;
+  if (!results.poseLandmarks) {
+    updateStatus('Tidak dapat mendeteksi pose pada foto referensi.', true);
+    return;
+  }
+  referenceLandmarks = results.poseLandmarks.map((l) => ({ x: l.x, y: l.y, z: l.z }));
+  // draw preview
+  if (refCanvasEl && refCtx) {
+    refCanvasEl.width = Math.min(480, results.image.width);
+    refCanvasEl.height = Math.min(360, results.image.height * (refCanvasEl.width / results.image.width));
+    refCtx.setTransform(1, 0, 0, 1, 0, 0);
+    refCtx.clearRect(0, 0, refCanvasEl.width, refCanvasEl.height);
+    refCtx.drawImage(results.image, 0, 0, refCanvasEl.width, refCanvasEl.height);
+    drawConnectors(refCtx, results.poseLandmarks, POSE_CONNECTIONS, { color: 'rgba(124,252,0,0.9)', lineWidth: 2 });
+    drawLandmarks(refCtx, results.poseLandmarks, { color: '#fff', lineWidth: 1, radius: 2 });
+    try {
+      const dataUrl = refCanvasEl.toDataURL('image/jpeg', 0.8);
+      // store dataURL into current references entry if exists
+      if (selectedRefIndex >= 0 && references[selectedRefIndex]) {
+        references[selectedRefIndex].dataURL = dataUrl;
+        references[selectedRefIndex].name = references[selectedRefIndex].file ? references[selectedRefIndex].file.name : `ref-${Date.now()}`;
+      }
+    } catch (e) {
+      console.warn('Tidak dapat mengambil dataURL preview', e);
+    }
+  }
+  updateStatus('Foto referensi tersimpan. Kini sistem dapat membandingkan posisi.', false);
+}
+
+function saveCurrentReferenceToLocal() {
+  if (!referenceLandmarks || !refCanvasEl) {
+    updateStatus('Tidak ada referensi aktif untuk disimpan.', true);
+    return;
+  }
+  try {
+    const dataUrl = refCanvasEl.toDataURL('image/jpeg', 0.9);
+    const saved = JSON.parse(localStorage.getItem('savedPoseRefs') || '[]');
+    saved.push({ name: `ref-${Date.now()}`, image: dataUrl, landmarks: referenceLandmarks });
+    localStorage.setItem('savedPoseRefs', JSON.stringify(saved));
+    renderSavedRefs();
+    updateStatus('Referensi disimpan ke browser.', false);
+  } catch (e) {
+    console.error('save error', e);
+    updateStatus('Gagal menyimpan referensi.', true);
+  }
+}
+
+function renderSavedRefs() {
+  if (!savedContainer) return;
+  const saved = JSON.parse(localStorage.getItem('savedPoseRefs') || '[]');
+  savedContainer.innerHTML = '';
+  saved.forEach((item, idx) => {
+    const img = document.createElement('img');
+    img.src = item.image;
+    img.style.width = '80px';
+    img.style.height = '60px';
+    img.style.objectFit = 'cover';
+    img.style.borderRadius = '6px';
+    img.style.cursor = 'pointer';
+    img.title = item.name;
+    img.addEventListener('click', () => {
+      // load as active reference
+      const im = new Image();
+      im.onload = () => {
+        referenceImage = im;
+        referenceLandmarks = item.landmarks;
+        if (refCanvasEl && refCtx) {
+          refCanvasEl.width = im.width;
+          refCanvasEl.height = im.height * (refCanvasEl.width / im.width);
+          refCtx.setTransform(1, 0, 0, 1, 0, 0);
+          refCtx.clearRect(0, 0, refCanvasEl.width, refCanvasEl.height);
+          refCtx.drawImage(im, 0, 0, refCanvasEl.width, refCanvasEl.height);
+        }
+        updateStatus('Referensi dimuat dari penyimpanan lokal.', false);
+      };
+      im.src = item.image;
+    });
+    savedContainer.appendChild(img);
+  });
+}
+
+function clearSavedRefs() {
+  localStorage.removeItem('savedPoseRefs');
+  renderSavedRefs();
+  updateStatus('Semua referensi tersimpan dihapus.', false);
+}
+
+function exportSavedRefs() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('savedPoseRefs') || '[]');
+    const blob = new Blob([JSON.stringify(saved)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `pose_refs_${Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    updateStatus('Preset diekspor sebagai file JSON.', false);
+  } catch (e) {
+    console.error('export error', e);
+    updateStatus('Gagal mengekspor preset.', true);
+  }
+}
+
+function importSavedRefs(file) {
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      if (!Array.isArray(data)) throw new Error('Invalid format');
+      localStorage.setItem('savedPoseRefs', JSON.stringify(data));
+      renderSavedRefs();
+      updateStatus('Preset berhasil diimpor.', false);
+    } catch (err) {
+      console.error('import error', err);
+      updateStatus('Gagal mengimpor preset. Pastikan format JSON benar.', true);
+    }
+  };
+  reader.onerror = () => updateStatus('Gagal membaca file impor.', true);
+  reader.readAsText(file);
+}
+
+function computePoseSimilarity(ref, live) {
+  if (!ref || !live) return 0;
+  function centerAndScale(landmarks) {
+    const left = landmarks[11];
+    const right = landmarks[12];
+    const fallbackLeft = landmarks[23];
+    const fallbackRight = landmarks[24];
+    const a = left || fallbackLeft;
+    const b = right || fallbackRight;
+    const cx = (a.x + b.x) / 2;
+    const cy = (a.y + b.y) / 2;
+    const scale = Math.hypot(a.x - b.x, a.y - b.y) || 1e-6;
+    return { cx, cy, scale };
+  }
+  const r = centerAndScale(ref);
+  const s = centerAndScale(live);
+  const indices = Array.from({ length: Math.min(ref.length, live.length) }, (_, i) => i);
+  let sum = 0;
+  let count = 0;
+  indices.forEach((i) => {
+    const ra = ref[i];
+    const la = live[i];
+    if (!ra || !la) return;
+    const rx = (ra.x - r.cx) / r.scale;
+    const ry = (ra.y - r.cy) / r.scale;
+    const lx = (la.x - s.cx) / s.scale;
+    const ly = (la.y - s.cy) / s.scale;
+    const d = Math.hypot(rx - lx, ry - ly);
+    // similarity per keypoint, tolerance roughly 0.5
+    const sim = Math.max(0, 1 - d / 0.5);
+    sum += sim;
+    count += 1;
+  });
+  if (count === 0) return 0;
+  return (sum / count) * 100; // percent
+}
+
+function updateAccuracyDisplay(percent) {
+  if (!accuracyResult) return;
+  const pass = percent >= similarityThreshold;
+  accuracyResult.textContent = `Presisi: ${percent.toFixed(1)}% — ${pass ? 'Benar' : 'Salah'}`;
+  accuracyResult.style.color = pass ? '#8cff7a' : '#ff8c8c';
+}
+
 function drawLabel(point, title, subtitle) {
   const padding = 6;
   const lineHeight = 18;
@@ -165,6 +361,12 @@ function onResults(results) {
 
   if (results.poseLandmarks) {
     const landmarks = results.poseLandmarks;
+    // ensure no mirroring when drawing results
+    if (mirrorCanvas) {
+      canvasCtx.setTransform(-1, 0, 0, 1, canvasElement.width, 0);
+    } else {
+      canvasCtx.setTransform(1, 0, 0, 1, 0, 0);
+    }
     drawConnectors(canvasCtx, landmarks, POSE_CONNECTIONS, { color: 'rgba(255,255,255,0.25)', lineWidth: 2 });
     drawNerveLines(landmarks);
     drawLandmarks(canvasCtx, landmarks, { color: '#fff', lineWidth: 1, radius: 2 });
@@ -175,6 +377,11 @@ function onResults(results) {
     });
     drawLabelSet(landmarks);
     updateStatus('Audience terdeteksi. Titik dan garis saraf mengikuti gerakan.');
+    // if a reference exists, compute similarity
+    if (referenceLandmarks) {
+      const percent = computePoseSimilarity(referenceLandmarks, landmarks);
+      updateAccuracyDisplay(percent);
+    }
   } else {
     updateStatus('Tidak ada audience yang terdeteksi. Silakan masuk ke frame kamera.');
   }
@@ -198,6 +405,97 @@ if (typeof Pose !== 'undefined') {
   updateStatus('Library MediaPipe tidak bisa dimuat. Kamera tetap bisa dipakai dalam mode langsung.', false);
 }
 
+// Create a separate Pose instance for processing reference images
+if (typeof Pose !== 'undefined') {
+  poseRef = new Pose({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
+  poseRef.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.6 });
+  poseRef.onResults(onReferenceResults);
+}
+
+function renderThumbnails(files) {
+  if (!thumbnailsContainer) return;
+  thumbnailsContainer.innerHTML = '';
+  Array.from(files).forEach((file, idx) => {
+    const url = URL.createObjectURL(file);
+    const img = document.createElement('img');
+    img.src = url;
+    img.style.width = '80px';
+    img.style.height = '60px';
+    img.style.objectFit = 'cover';
+    img.style.borderRadius = '6px';
+    img.style.cursor = 'pointer';
+    img.title = file.name;
+    img.addEventListener('click', () => {
+      // mark selection
+      Array.from(thumbnailsContainer.children).forEach((c) => c.style.outline = '');
+      img.style.outline = '3px solid rgba(109,92,255,0.6)';
+      selectedRefIndex = idx;
+    });
+    thumbnailsContainer.appendChild(img);
+  });
+}
+
+function loadReferenceFromFile(file) {
+  const img = new Image();
+  img.onload = () => {
+    referenceImage = img;
+    if (poseRef && typeof poseRef.send === 'function') {
+      poseRef.send({ image: img });
+    } else {
+      updateStatus('Pose reference tidak tersedia.', true);
+    }
+  };
+  img.onerror = () => updateStatus('Gagal memuat foto referensi.', true);
+  img.src = URL.createObjectURL(file);
+}
+
+if (refUpload) {
+  refUpload.addEventListener('change', (e) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    renderThumbnails(files);
+    // populate references array metadata
+    references = Array.from(files).map((f) => ({ file: f }));
+    selectedRefIndex = 0;
+    // auto-select first thumbnail outline
+    const first = thumbnailsContainer && thumbnailsContainer.children[0];
+    if (first) first.style.outline = '3px solid rgba(109,92,255,0.6)';
+  });
+}
+
+if (setRefBtn) {
+  setRefBtn.addEventListener('click', () => {
+    if (references.length === 0) {
+      updateStatus('Pilih file foto terlebih dahulu.', true);
+      return;
+    }
+    const idx = selectedRefIndex >= 0 ? selectedRefIndex : 0;
+    const file = references[idx].file;
+    loadReferenceFromFile(file);
+  });
+}
+
+if (thresholdSlider && thresholdLabel) {
+  thresholdSlider.addEventListener('input', (e) => {
+    similarityThreshold = Number(e.target.value);
+    thresholdLabel.textContent = `${similarityThreshold}%`;
+  });
+}
+
+if (mirrorToggle) {
+  mirrorToggle.addEventListener('change', (e) => { mirrorCanvas = !!e.target.checked; });
+}
+
+if (saveRefBtn) saveRefBtn.addEventListener('click', saveCurrentReferenceToLocal);
+if (clearSavedBtn) clearSavedBtn.addEventListener('click', clearSavedRefs);
+if (exportRefsBtn) exportRefsBtn.addEventListener('click', exportSavedRefs);
+if (importRefsInput) importRefsInput.addEventListener('change', (e) => {
+  if (!e.target.files || e.target.files.length === 0) return; importSavedRefs(e.target.files[0]);
+});
+
+// load saved refs on startup
+try { renderSavedRefs(); } catch (e) { console.warn('renderSavedRefs failed', e); }
+
 async function startCamera() {
   const permState = await getCameraPermissionState();
   if (permState === 'denied') {
@@ -219,7 +517,17 @@ async function startCamera() {
   videoElement.muted = true;
 
   try {
-    mediaStream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
+    const aspect = window.innerWidth / Math.max(1, window.innerHeight);
+    const isMobile = /Mobi|Android/i.test(navigator.userAgent);
+    const constraints = {
+      video: {
+        aspectRatio: aspect,
+        facingMode: isMobile ? 'environment' : 'user',
+        width: { ideal: isMobile ? 720 : 1280 },
+        height: { ideal: isMobile ? 1280 : 720 }
+      }
+    };
+    mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
     videoElement.srcObject = mediaStream;
     await videoElement.play();
     if (videoElement.readyState < 2) {
@@ -264,3 +572,25 @@ function stopCamera() {
 startBtn.addEventListener('click', startCamera);
 stopBtn.addEventListener('click', stopCamera);
 setButtons();
+
+// reference upload / set handlers
+if (setRefBtn) {
+  setRefBtn.addEventListener('click', () => {
+    if (!refUpload || !refUpload.files || refUpload.files.length === 0) {
+      updateStatus('Pilih file foto terlebih dahulu.', true);
+      return;
+    }
+    const file = refUpload.files[0];
+    const img = new Image();
+    img.onload = () => {
+      referenceImage = img;
+      if (poseRef && typeof poseRef.send === 'function') {
+        poseRef.send({ image: img });
+      } else {
+        updateStatus('Pose reference tidak tersedia.', true);
+      }
+    };
+    img.onerror = () => updateStatus('Gagal memuat foto referensi.', true);
+    img.src = URL.createObjectURL(file);
+  });
+}

@@ -252,14 +252,7 @@
           <input id="thresholdSlider" type="range" min="10" max="95" value="70" />
           <div id="thresholdLabel" style="color:#fff;font-weight:600;min-width:60px;text-align:center;">70%</div>
         </div>
-      </div>
-      <div class="control-column">
-        <div class="preview-row">
-          <canvas id="refCanvas" width="240" height="180" style="background:#111;border-radius:8px;border:1px solid rgba(255,255,255,0.04);"></canvas>
-          <div id="accuracyResult" style="color:#fff;font-weight:600;min-width:160px;">Belum ada foto referensi.</div>
-        </div>
-        <div id="thumbnailsContainer" style="display:flex;gap:8px;overflow-x:auto;padding:6px;max-width:520px;"></div>
-        <div class="button-group">
+        <div class="button-group" style="margin-top:16px;justify-content:center;flex-wrap:wrap;">
           <button id="saveRefBtn" class="button-start">Simpan Referensi</button>
           <button id="clearSavedBtn" class="button-pause">Hapus Semua Simpanan</button>
           <button id="exportRefsBtn" class="button-start">Export Preset</button>
@@ -269,12 +262,19 @@
           </label>
           <button id="forceNoMirrorBtn" class="button-start" style="background:#ff6b6b;">Force No-Mirror</button>
         </div>
+        <div class="buttons" style="margin-top:12px;justify-content:center;">
+          <button id="startBtn" class="button-start">Mulai Kamera</button>
+          <button id="stopBtn" class="button-pause">Berhenti</button>
+        </div>
+      </div>
+      <div class="control-column">
+        <div class="preview-row">
+          <canvas id="refCanvas" width="240" height="180" style="background:#111;border-radius:8px;border:1px solid rgba(255,255,255,0.04);"></canvas>
+          <div id="accuracyResult" style="color:#fff;font-weight:600;min-width:160px;">Belum ada foto referensi.</div>
+        </div>
+        <div id="thumbnailsContainer" style="display:flex;gap:8px;overflow-x:auto;padding:6px;max-width:520px;"></div>
         <div id="savedContainer" style="display:flex;gap:8px;overflow-x:auto;padding:6px;max-width:520px;margin-top:8px;color:#ccc;"></div>
       </div>
-    </div>
-    <div class="buttons">
-      <button id="startBtn" class="button-start">Mulai Kamera</button>
-      <button id="stopBtn" class="button-pause">Berhenti</button>
     </div>
     <div class="footer">Audience dideteksi, titik dan garis saraf mengikuti gerakan tubuh.</div>
   </div>

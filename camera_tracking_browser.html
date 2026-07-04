@@ -53,6 +53,12 @@
       flex-direction: column;
       gap: 16px;
     }
+    @media (max-width: 480px) {
+      .main-content {
+        gap: 12px;
+        padding-top: 100vh;
+      }
+    }
     .title {
       font-size: 24px;
       font-weight: 700;
@@ -88,6 +94,18 @@
         border-radius: 10px;
         padding: 10px;
       }
+      /* Make video feed section card full screen */
+      .main-content > div:nth-child(3) {
+        padding: 0;
+        margin: -10px -10px 0 -10px;
+        background: transparent;
+        border: none;
+        box-shadow: none;
+      }
+      /* Hide section title for video on mobile */
+      .main-content > div:nth-child(3) > .section-title {
+        display: none;
+      }
     }
     .section-title {
       font-size: 13px;
@@ -122,9 +140,23 @@
     }
     @media (max-width: 480px) {
       .video-card {
-        aspect-ratio: 16 / 9;
-        min-height: 180px;
-        border-radius: 10px;
+        aspect-ratio: 9 / 16;
+        min-height: auto;
+        height: 100vh;
+        max-height: 100vh;
+        border-radius: 0;
+        margin: -10px -10px 0 -10px;
+        padding: 0;
+        box-shadow: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        width: 100vw;
+        z-index: 50;
+      }
+      .video-card ~ .section-card {
+        margin-top: 100vh;
       }
     }
     video {

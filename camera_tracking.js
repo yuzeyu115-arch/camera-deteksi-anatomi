@@ -314,11 +314,51 @@ function computePoseSimilarity(ref, live) {
   return (sum / count) * 100; // percent
 }
 
+// Calculate joint distance metrics
+function calculateJointDistances(landmarks) {
+  if (!landmarks || landmarks.length < 2) return { distance: 0, avgDistance: 0 };
+  
+  let totalDistance = 0;
+  let count = 0;
+  
+  // Calculate distances between major joints
+  const jointPairs = [
+    [11, 13], // Left shoulder to left elbow
+    [13, 15], // Left elbow to left wrist
+    [12, 14], // Right shoulder to right elbow
+    [14, 16], // Right elbow to right wrist
+    [23, 25], // Left hip to left knee
+    [25, 27], // Left knee to left ankle
+    [24, 26], // Right hip to right knee
+    [26, 28]  // Right knee to right ankle
+  ];
+  
+  jointPairs.forEach(([i, j]) => {
+    if (landmarks[i] && landmarks[j]) {
+      const dx = landmarks[i].x - landmarks[j].x;
+      const dy = landmarks[i].y - landmarks[j].y;
+      const distance = Math.hypot(dx, dy);
+      totalDistance += distance;
+      count++;
+    }
+  });
+  
+  return {
+    distance: totalDistance,
+    avgDistance: count > 0 ? totalDistance / count : 0
+  };
+}
+
 function updateAccuracyDisplay(percent) {
   if (!accuracyResult) return;
   const pass = percent >= similarityThreshold;
   accuracyResult.textContent = `Presisi: ${percent.toFixed(1)}% — ${pass ? 'Benar' : 'Salah'}`;
   accuracyResult.style.color = pass ? '#8cff7a' : '#ff8c8c';
+  
+  // Also update the enhanced UI if available
+  if (window.EnhancedUI && window.EnhancedUI.updateAccuracyDisplay) {
+    window.EnhancedUI.updateAccuracyDisplay(percent);
+  }
 }
 
 function drawLabel(point, title, subtitle) {
@@ -379,10 +419,23 @@ function onResults(results) {
     });
     drawLabelSet(landmarks);
     updateStatus('Audience terdeteksi. Titik dan garis saraf mengikuti gerakan.');
+    
     // if a reference exists, compute similarity
     if (referenceLandmarks) {
       const percent = computePoseSimilarity(referenceLandmarks, landmarks);
       updateAccuracyDisplay(percent);
+      
+      // Calculate and update distance metrics
+      const refDistances = calculateJointDistances(referenceLandmarks);
+      const liveDistances = calculateJointDistances(landmarks);
+      
+      if (window.EnhancedUI && window.EnhancedUI.updateDistanceMetrics) {
+        window.EnhancedUI.updateDistanceMetrics(
+          refDistances.avgDistance,
+          liveDistances.avgDistance,
+          percent
+        );
+      }
     }
     canvasCtx.restore();
   } else {

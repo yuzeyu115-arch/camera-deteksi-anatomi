@@ -3,41 +3,129 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Camera Pose Tracking</title>
+  <title>Sistem Deteksi Anatomi & Tracking Terapi</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
     body {
       margin: 0;
       min-height: 100vh;
       display: flex;
-      align-items: center;
-      justify-content: center;
-      background: #121212;
+      background: linear-gradient(135deg, #0f0f1e 0%, #1a1a2e 100%);
       color: #fff;
       font-family: 'Poppins', Arial, sans-serif;
     }
     .container {
-      width: min(100%, 1080px);
+      width: 100%;
+      display: flex;
+      gap: 16px;
       padding: 16px;
-      box-sizing: border-box;
+    }
+    .sidebar {
+      width: 280px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow-y: auto;
+      max-height: 100vh;
+      padding-bottom: 20px;
+    }
+    @media (max-width: 1024px) {
+      .container {
+        flex-direction: column;
+        padding: 12px;
+      }
+      .sidebar {
+        width: 100%;
+        max-height: none;
+        overflow-y: visible;
+        padding-bottom: 10px;
+      }
+    }
+    .main-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
     }
     .title {
-      text-align: center;
-      margin-bottom: 16px;
       font-size: 24px;
       font-weight: 700;
+      margin-bottom: 8px;
+      color: #6d5cff;
+    }
+    @media (max-width: 768px) {
+      .title {
+        font-size: 20px;
+        margin-bottom: 6px;
+      }
+    }
+    @media (max-width: 480px) {
+      .title {
+        font-size: 18px;
+      }
+    }
+    .section-card {
+      background: rgba(45, 45, 60, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 16px;
+      backdrop-filter: blur(10px);
+    }
+    @media (max-width: 768px) {
+      .section-card {
+        border-radius: 12px;
+        padding: 12px;
+      }
+    }
+    @media (max-width: 480px) {
+      .section-card {
+        border-radius: 10px;
+        padding: 10px;
+      }
+    }
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #aaa;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+    }
+    @media (max-width: 768px) {
+      .section-title {
+        font-size: 12px;
+        margin-bottom: 10px;
+      }
     }
     .video-card {
       position: relative;
-      border-radius: 30px;
+      border-radius: 16px;
       overflow: hidden;
-      background: linear-gradient(180deg, #1e1b2e 0%, #11101c 100%);
-      box-shadow: 0 30px 90px rgba(0, 0, 0, 0.45);
+      background: #000;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
       width: 100%;
-      max-width: 1080px;
-      margin: 0 auto;
-      aspect-ratio: 9 / 16;
-      min-height: 420px;
+      aspect-ratio: 16 / 9;
+      min-height: 300px;
+    }
+    @media (max-width: 768px) {
+      .video-card {
+        aspect-ratio: 4 / 3;
+        min-height: 240px;
+        border-radius: 12px;
+      }
+    }
+    @media (max-width: 480px) {
+      .video-card {
+        aspect-ratio: 16 / 9;
+        min-height: 180px;
+        border-radius: 10px;
+      }
     }
     video {
       position: absolute;
@@ -52,27 +140,164 @@
       display: block;
       background: #000;
     }
-    .controls-row {
-      display: flex;
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
       gap: 16px;
-      align-items: flex-start;
-      justify-content: center;
-      margin-top: 12px;
-      flex-wrap: wrap;
     }
-    .control-column {
+    @media (max-width: 768px) {
+      .grid-2 {
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+    }
+    .accuracy-display {
       display: flex;
       flex-direction: column;
       gap: 12px;
-      align-items: stretch;
-      min-width: 280px;
-      flex: 1 1 320px;
     }
-    .control-row-inner {
+    .accuracy-value {
+      font-size: 28px;
+      font-weight: 700;
+      text-align: center;
+      padding: 16px;
+      border-radius: 12px;
+      background: rgba(0, 0, 0, 0.3);
+    }
+    @media (max-width: 768px) {
+      .accuracy-value {
+        font-size: 24px;
+        padding: 12px;
+        border-radius: 10px;
+      }
+    }
+    @media (max-width: 480px) {
+      .accuracy-value {
+        font-size: 20px;
+        padding: 10px;
+        border-radius: 8px;
+      }
+    }
+    .accuracy-bar {
+      width: 100%;
+      height: 24px;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 999px;
+      overflow: hidden;
+      position: relative;
+    }
+    @media (max-width: 768px) {
+      .accuracy-bar {
+        height: 20px;
+      }
+    }
+    @media (max-width: 480px) {
+      .accuracy-bar {
+        height: 18px;
+      }
+    }
+    .accuracy-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #ef4444 0%, #eab308 50%, #22c55e 100%);
+      transition: width 0.3s ease;
+      border-radius: 999px;
+    }
+    .accuracy-label {
+      font-size: 12px;
+      color: #aaa;
+      text-align: center;
+    }
+    .distance-metrics {
       display: flex;
-      flex-wrap: wrap;
+      flex-direction: column;
       gap: 8px;
+    }
+    .metric-item {
+      display: flex;
+      justify-content: space-between;
       align-items: center;
+      padding: 8px 12px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 8px;
+      font-size: 13px;
+    }
+    @media (max-width: 768px) {
+      .metric-item {
+        padding: 6px 10px;
+        font-size: 12px;
+        border-radius: 6px;
+      }
+    }
+    @media (max-width: 480px) {
+      .metric-item {
+        padding: 5px 8px;
+        font-size: 11px;
+        border-radius: 4px;
+      }
+    }
+    .metric-label {
+      color: #aaa;
+    }
+    .metric-value {
+      font-weight: 600;
+      color: #6d5cff;
+    }
+    .select-field {
+      width: 100%;
+      padding: 10px 12px;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      color: #fff;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .select-field:focus {
+      outline: none;
+      border-color: #6d5cff;
+      box-shadow: 0 0 0 2px rgba(109, 92, 255, 0.2);
+    }
+    @media (max-width: 768px) {
+      .select-field {
+        padding: 8px 10px;
+        font-size: 12px;
+        border-radius: 6px;
+      }
+    }
+    @media (max-width: 480px) {
+      .select-field {
+        padding: 7px 8px;
+        font-size: 11px;
+        border-radius: 4px;
+      }
+    }
+    .patient-info {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .info-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 8px;
+      font-size: 13px;
+    }
+    .info-label {
+      color: #aaa;
+      min-width: 80px;
+    }
+    .info-value {
+      flex: 1;
+      color: #fff;
+      font-weight: 500;
+    }
+    .chart-container {
+      position: relative;
+      height: 200px;
     }
     .button-group {
       display: flex;
@@ -80,56 +305,13 @@
       gap: 8px;
       align-items: center;
     }
-    .preview-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      align-items: center;
-      justify-content: center;
-    }
-    @media (max-width: 840px) {
+    @media (max-width: 1200px) {
       .container {
-        padding: 12px;
-      }
-      .title {
-        font-size: 20px;
-      }
-      .controls-row {
-        flex-direction: column;
-        align-items: stretch;
-      }
-      .control-column {
-        min-width: auto;
-      }
-      .preview-row {
         flex-direction: column;
       }
-      .video-card {
-        aspect-ratio: 9 / 16;
-      }
-      .buttons {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-      }
-      .overlay {
-        font-size: 14px;
-      }
-    }
-    @media (max-width: 520px) {
-      .video-card {
-        border-radius: 24px;
-      }
-      .title {
-        font-size: 18px;
-      }
-      .button-group,
-      .control-row-inner {
-        flex-direction: column;
-        align-items: stretch;
-      }
-      .button-group > *,
-      .buttons > * {
+      .sidebar {
         width: 100%;
+        max-height: none;
       }
     }
     .overlay {
@@ -138,183 +320,275 @@
       right: 16px;
       bottom: 18px;
       padding: 14px 18px;
-      border-radius: 24px;
+      border-radius: 12px;
       box-sizing: border-box;
       backdrop-filter: blur(12px);
-      background: rgba(18, 18, 18, 0.75);
-      color: #fff;
-      font-size: 16px;
-      text-align: center;
-      border: 1px solid rgba(255, 255, 255, 0.08);
-    }
-    .desktop-status {
-      display: block;
-      margin: 16px auto 0;
-      max-width: 1080px;
-      padding: 12px 18px;
-      border-radius: 20px;
       background: rgba(18, 18, 18, 0.85);
-      border: 1px solid rgba(255, 255, 255, 0.08);
       color: #fff;
+      font-size: 14px;
       text-align: center;
-      font-size: 15px;
-    }
-    .controls-row {
-      display: flex;
-      gap: 16px;
-      align-items: flex-start;
-      justify-content: center;
-      margin-top: 12px;
-      flex-wrap: wrap;
-    }
-    .control-column {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      align-items: stretch;
-      min-width: 280px;
-      flex: 1 1 320px;
-    }
-    .control-row-inner {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-      align-items: center;
-      justify-content: space-between;
-    }
-    .control-row-inner > label,
-    .control-row-inner > input,
-    .control-row-inner > div {
-      flex: 1 1 auto;
-      min-width: 0;
-    }
-    .button-group {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-      gap: 12px;
-      align-items: center;
-      justify-items: center;
-    }
-    .button-group > * {
-      min-width: 0;
-      width: 100%;
-      text-align: center;
-    }
-    .button-group label {
-      justify-content: center;
-      width: 100%;
-    }
-    .buttons {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-      gap: 12px;
-      margin-top: 16px;
-      justify-items: center;
-      flex-wrap: wrap;
-    }
-    .buttons > * {
-      width: 100%;
-      min-width: 0;
-    }
-    .preview-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      align-items: center;
-      justify-content: center;
-    }
-    .buttons {
-      display: flex;
-      gap: 12px;
-      margin-top: 16px;
-      justify-content: center;
-      flex-wrap: wrap;
+      border: 1px solid rgba(255, 255, 255, 0.08);
     }
     button {
       border: none;
-      border-radius: 999px;
-      padding: 12px 24px;
-      font-size: 16px;
+      border-radius: 8px;
+      padding: 10px 16px;
+      font-size: 13px;
       font-weight: 600;
       cursor: pointer;
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
-      min-width: 160px;
+      transition: all 0.2s ease;
+      min-width: 120px;
     }
-    button:hover { transform: translateY(-1px); }
+    @media (max-width: 768px) {
+      button {
+        padding: 8px 12px;
+        font-size: 12px;
+        min-width: 100px;
+        border-radius: 6px;
+      }
+    }
+    @media (max-width: 480px) {
+      button {
+        padding: 6px 10px;
+        font-size: 11px;
+        min-width: 80px;
+        border-radius: 4px;
+      }
+    }
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+    }
     .button-start {
       background: #6d5cff;
       color: #fff;
-      box-shadow: 0 12px 32px rgba(109, 92, 255, 0.3);
+      box-shadow: 0 8px 20px rgba(109, 92, 255, 0.2);
+    }
+    .button-start:hover {
+      background: #7a69ff;
     }
     .button-pause {
-      background: #2b2b2b;
+      background: rgba(255, 255, 255, 0.08);
       color: #fff;
-      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .button-pause:hover {
+      background: rgba(255, 255, 255, 0.12);
+    }
+    .button-danger {
+      background: #ef4444;
+      color: #fff;
+    }
+    .button-danger:hover {
+      background: #f87171;
     }
     .footer {
       margin-top: 16px;
       text-align: center;
-      color: #aaa;
-      font-size: 14px;
+      color: #666;
+      font-size: 12px;
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.02);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+    
+    /* Responsive Canvas */
+    canvas {
+      max-width: 100%;
+      height: auto;
+    }
+    
+    /* Mobile specific adjustments */
+    @media (max-width: 480px) {
+      .main-content {
+        gap: 12px;
+      }
+      .control-column {
+        gap: 10px;
+      }
+      .patient-info {
+        gap: 6px;
+      }
+      .distance-metrics {
+        gap: 6px;
+      }
+      .accuracy-display {
+        gap: 10px;
+      }
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="title">Camera Live Tracking - Audience Pose</div>
-    <div class="video-card">
-      <video id="input_video" playsinline autoplay muted></video>
-      <canvas id="output_canvas"></canvas>
-      <div id="status" class="overlay">Klik "Mulai Kamera" untuk mengaktifkan kamera.</div>
-    </div>
-    <div class="controls-row">
-      <div class="control-column">
-        <div class="control-row-inner">
-          <label style="color:#ddd;font-size:14px;display:flex;gap:8px;align-items:center;">
-            <input id="refUpload" type="file" accept="image/*" style="display:inline-block;" multiple />
-            <span>Unggah Foto Referensi</span>
-          </label>
-        </div>
-        <div class="control-row-inner">
-          <button id="setRefBtn" class="button-start">Set Foto Referensi</button>
-          <label style="color:#ddd;font-size:14px;display:flex;gap:6px;align-items:center;">Mirror
-            <input id="mirrorToggle" type="checkbox" style="margin-left:6px;" />
-          </label>
-        </div>
-        <div class="control-row-inner">
-          <label style="color:#ddd;font-size:14px;">Threshold:</label>
-          <input id="thresholdSlider" type="range" min="10" max="95" value="70" />
-          <div id="thresholdLabel" style="color:#fff;font-weight:600;min-width:60px;text-align:center;">70%</div>
-        </div>
-        <div class="button-group" style="margin-top:16px;justify-content:center;flex-wrap:wrap;">
-          <button id="saveRefBtn" class="button-start">Simpan Referensi</button>
-          <button id="clearSavedBtn" class="button-pause">Hapus Semua Simpanan</button>
-          <button id="exportRefsBtn" class="button-start">Export Preset</button>
-          <label class="button-pause" style="padding:10px 14px;border-radius:999px;cursor:pointer;display:inline-flex;align-items:center;">
-            Import Preset
-            <input id="importRefsInput" type="file" accept="application/json" style="display:none;margin-left:8px;" />
-          </label>
-          <button id="forceNoMirrorBtn" class="button-start" style="background:#ff6b6b;">Force No-Mirror</button>
-        </div>
-        <div class="buttons" style="margin-top:12px;justify-content:center;">
-          <button id="startBtn" class="button-start">Mulai Kamera</button>
-          <button id="stopBtn" class="button-pause">Berhenti</button>
+    <!-- SIDEBAR - Panel Kontrol Utama -->
+    <div class="sidebar">
+      <div class="section-card">
+        <div class="section-title">⚙️ Opsi Aksi Terapi</div>
+        <select id="therapyAction" class="select-field">
+          <option value="">Pilih Aksi Terapi</option>
+          <option value="posture">Perbaikan Postur</option>
+          <option value="range">Rentang Gerak Sendi</option>
+          <option value="strength">Latihan Kekuatan</option>
+          <option value="balance">Keseimbangan</option>
+          <option value="flexibility">Fleksibilitas</option>
+          <option value="gait">Analisis Berjalan</option>
+          <option value="coordination">Koordinasi Gerakan</option>
+        </select>
+      </div>
+
+      <div class="section-card">
+        <div class="section-title">🦴 Pergerakan Sendi</div>
+        <select id="jointMovement" class="select-field">
+          <option value="">Pilih Sendi</option>
+          <option value="shoulder">Bahu (Shoulder)</option>
+          <option value="elbow">Siku (Elbow)</option>
+          <option value="wrist">Pergelangan Tangan</option>
+          <option value="hip">Pinggul (Hip)</option>
+          <option value="knee">Lutut (Knee)</option>
+          <option value="ankle">Pergelangan Kaki</option>
+          <option value="neck">Leher (Neck)</option>
+          <option value="spine">Tulang Belakang</option>
+        </select>
+      </div>
+
+      <div class="section-card">
+        <div class="section-title">👤 Info Pasien</div>
+        <div class="patient-info">
+          <input type="text" id="patientName" class="select-field" placeholder="Nama Pasien" />
+          <input type="text" id="patientAge" class="select-field" placeholder="Usia" />
+          <input type="text" id="therapySession" class="select-field" placeholder="Sesi #1" />
+          <input type="date" id="sessionDate" class="select-field" />
         </div>
       </div>
-      <div class="control-column">
-        <div class="preview-row">
-          <canvas id="refCanvas" width="240" height="180" style="background:#111;border-radius:8px;border:1px solid rgba(255,255,255,0.04);"></canvas>
-          <div id="accuracyResult" style="color:#fff;font-weight:600;min-width:160px;">Belum ada foto referensi.</div>
-        </div>
-        <div id="thumbnailsContainer" style="display:flex;gap:8px;overflow-x:auto;padding:6px;max-width:520px;"></div>
-        <div id="savedContainer" style="display:flex;gap:8px;overflow-x:auto;padding:6px;max-width:520px;margin-top:8px;color:#ccc;"></div>
+
+      <div class="section-card">
+        <div class="section-title">📸 Foto Referensi</div>
+        <label style="color:#ddd;font-size:13px;display:flex;gap:8px;align-items:center;cursor:pointer;">
+          <input id="refUpload" type="file" accept="image/*" style="display:none;" multiple />
+          <span>📁 Unggah Foto</span>
+        </label>
+        <button id="setRefBtn" class="button-start" style="width:100%;margin-top:8px;">Gunakan Foto</button>
+        <button id="saveRefBtn" class="button-start" style="width:100%;margin-top:4px;">💾 Simpan</button>
+      </div>
+
+      <div class="section-card">
+        <div class="section-title">⚡ Kontrol</div>
+        <button id="startBtn" class="button-start" style="width:100%;">▶️ Mulai Kamera</button>
+        <button id="stopBtn" class="button-pause" style="width:100%;margin-top:8px;">⏹️ Berhenti</button>
+      </div>
+
+      <div class="section-card">
+        <div class="section-title">🔧 Pengaturan</div>
+        <label style="color:#ddd;font-size:13px;display:flex;gap:8px;align-items:center;">
+          <input id="mirrorToggle" type="checkbox" />
+          <span>Mirror</span>
+        </label>
+        <label style="color:#ddd;font-size:13px;display:flex;gap:8px;align-items:center;margin-top:8px;">
+          <span>Threshold:</span>
+          <input id="thresholdSlider" type="range" min="10" max="95" value="70" style="flex:1;" />
+          <div id="thresholdLabel" style="color:#fff;font-weight:600;min-width:45px;text-align:center;">70%</div>
+        </label>
+        <button id="clearSavedBtn" class="button-danger" style="width:100%;margin-top:8px;">Hapus Semua</button>
       </div>
     </div>
-    <div class="footer">Audience dideteksi, titik dan garis saraf mengikuti gerakan tubuh.</div>
+
+    <!-- MAIN CONTENT -->
+    <div class="main-content">
+      <!-- Header -->
+      <div>
+        <div class="title">🎯 Sistem Deteksi Anatomi & Tracking Terapi</div>
+        <p style="color:#aaa;font-size:13px;margin-top:4px;">Real-time skeleton detection dengan akurasi gerakan</p>
+      </div>
+
+      <!-- Video Feed -->
+      <div class="section-card">
+        <div class="section-title">📹 Feed Kamera Live</div>
+        <div class="video-card">
+          <video id="input_video" playsinline autoplay muted></video>
+          <canvas id="output_canvas"></canvas>
+          <div id="status" class="overlay">Klik "Mulai Kamera" untuk mengaktifkan kamera.</div>
+        </div>
+      </div>
+
+      <!-- Stats Row -->
+      <div class="grid-2">
+        <!-- Accuracy Display -->
+        <div class="section-card">
+          <div class="section-title">📊 Akurasi Deteksi</div>
+          <div class="accuracy-display">
+            <div class="accuracy-value" id="accuracyValue">---%</div>
+            <div class="accuracy-bar">
+              <div class="accuracy-bar-fill" id="accuracyBarFill"></div>
+            </div>
+            <div class="accuracy-label">Kualitas Deteksi Skeleton</div>
+          </div>
+        </div>
+
+        <!-- Distance Metrics -->
+        <div class="section-card">
+          <div class="section-title">📏 Metrik Jarak Sendi</div>
+          <div class="distance-metrics">
+            <div class="metric-item">
+              <span class="metric-label">Jarak Referensi:</span>
+              <span class="metric-value" id="distRef">--</span>
+            </div>
+            <div class="metric-item">
+              <span class="metric-label">Jarak Saat Ini:</span>
+              <span class="metric-value" id="distCurrent">--</span>
+            </div>
+            <div class="metric-item">
+              <span class="metric-label">Perbedaan:</span>
+              <span class="metric-value" id="distDiff">--</span>
+            </div>
+            <div class="metric-item">
+              <span class="metric-label">Nilai Kecocokan:</span>
+              <span class="metric-value" id="matchScore">0/100</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Reference & Chart Row -->
+      <div class="grid-2">
+        <!-- Reference Photo -->
+        <div class="section-card">
+          <div class="section-title">🖼️ Foto Referensi</div>
+          <canvas id="refCanvas" width="240" height="180" style="background:#000;border-radius:8px;border:1px solid rgba(255,255,255,0.1);width:100%;height:auto;display:block;"></canvas>
+          <div id="accuracyResult" style="color:#aaa;font-size:12px;margin-top:8px;text-align:center;">Belum ada foto referensi.</div>
+        </div>
+
+        <!-- Chart -->
+        <div class="section-card">
+          <div class="section-title">📈 Grafik Akurasi Real-time</div>
+          <div class="chart-container">
+            <canvas id="accuracyChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Thumbnails -->
+      <div class="section-card">
+        <div class="section-title">🔖 Foto Tersimpan</div>
+        <div id="savedContainer" style="display:flex;gap:8px;overflow-x:auto;padding:6px;"></div>
+        <div id="thumbnailsContainer" style="display:flex;gap:8px;overflow-x:auto;padding:6px;margin-top:8px;"></div>
+      </div>
+    </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/chart.js/dist/chart.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+  <script src="enhanced-ui.js"></script>
   <script src="camera_tracking.js"></script>
 </body>
 </html>

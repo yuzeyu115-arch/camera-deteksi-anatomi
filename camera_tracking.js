@@ -36,6 +36,10 @@ const summaryJoint = document.getElementById('summaryJoint');
 const therapyAction = document.getElementById('therapyAction');
 const therapyResult = document.getElementById('therapyResult');
 const jointMovement = document.getElementById('jointMovement');
+const cameraReferencePanel = document.getElementById('cameraReferencePanel');
+const cameraRefImage = document.getElementById('cameraRefImage');
+const cameraAccuracyValue = document.getElementById('cameraAccuracyValue');
+const cameraAccuracyResult = document.getElementById('cameraAccuracyResult');
 let mediaStream = null;
 let isRunning = false;
 let animationFrameId = null;
@@ -220,15 +224,10 @@ function drawFallbackPoseOverlay(landmarks) {
 
   drawNerveLines(landmarks);
 
-  visible.forEach((landmark, index) => {
+  visible.forEach((landmark) => {
     if (!landmark) return;
     const point = toCanvasPoint(landmark);
     drawGlowPoint(point, '#ff4d6d', 4);
-    if (landmarkLabels[index]) {
-      canvasCtx.font = '600 12px Poppins, sans-serif';
-      canvasCtx.fillStyle = 'rgba(255,255,255,0.95)';
-      canvasCtx.fillText(landmarkLabels[index].title, point.x + 8, point.y - 8);
-    }
   });
 }
 
@@ -329,6 +328,45 @@ function autoLoadFirstReference() {
     }
   } catch (error) {
     console.warn('autoLoadFirstReference failed', error);
+  }
+}
+
+function showCameraReferencePreview(src) {
+  if (!cameraReferencePanel || !cameraRefImage) return;
+  cameraRefImage.src = src || '';
+}
+
+function hideCameraReferencePreview() {
+  if (!cameraReferencePanel || !cameraRefImage) return;
+  cameraRefImage.src = '';
+}
+
+function tryAutoLoadReferenceForCamera() {
+  if (!therapyAction || !jointMovement) return;
+  if (!therapyAction.value || !jointMovement.value) {
+    return;
+  }
+  try {
+    const saved = JSON.parse(localStorage.getItem('savedPoseRefs') || '[]');
+    const first = saved.find((item) => item && item.image);
+    if (first) {
+      loadReferenceFromDataUrl(first.image, first.name || 'referensi otomatis');
+      showCameraReferencePreview(first.image);
+      if (cameraAccuracyResult) {
+        cameraAccuracyResult.textContent = 'Referensi dimuat. Menunggu deteksi...';
+        cameraAccuracyResult.style.color = '#d1d5db';
+      }
+      updateAccuracyDisplay(0);
+    } else {
+      showCameraReferencePreview('');
+      if (cameraAccuracyResult) {
+        cameraAccuracyResult.textContent = 'Tidak ada referensi tersimpan. Unggah di admin.';
+        cameraAccuracyResult.style.color = '#f0f0f0';
+      }
+      updateAccuracyDisplay(0);
+    }
+  } catch (error) {
+    console.warn('tryAutoLoadReferenceForCamera failed', error);
   }
 }
 
@@ -534,12 +572,20 @@ function calculateJointDistances(landmarks) {
 
 function updateAccuracyDisplay(percent) {
   const safePercent = Number.isFinite(percent) ? percent : 0;
+  const pass = safePercent >= similarityThreshold;
+  const resultText = `Presisi: ${safePercent.toFixed(1)}% — ${pass ? 'Benar' : 'Salah'}`;
+
   if (accuracyResult) {
-    const pass = safePercent >= similarityThreshold;
-    accuracyResult.textContent = `Presisi: ${safePercent.toFixed(1)}% — ${pass ? 'Benar' : 'Salah'}`;
+    accuracyResult.textContent = resultText;
     accuracyResult.style.color = pass ? '#8cff7a' : '#ff8c8c';
   }
-  
+  if (cameraAccuracyValue) {
+    cameraAccuracyValue.textContent = `${safePercent.toFixed(1)}%`;
+  }
+  if (cameraAccuracyResult) {
+    cameraAccuracyResult.textContent = resultText;
+    cameraAccuracyResult.style.color = pass ? '#8cff7a' : '#ff8c8c';
+  }
   if (window.EnhancedUI && window.EnhancedUI.updateAccuracyDisplay) {
     window.EnhancedUI.updateAccuracyDisplay(safePercent);
   }
@@ -598,7 +644,6 @@ function onResults(results) {
       drawConnectors(canvasCtx, landmarks, POSE_CONNECTIONS, { color: 'rgba(255,255,255,0.25)', lineWidth: 2 });
     }
     drawFallbackPoseOverlay(landmarks);
-    drawLabelSet(landmarks);
     updateStatus('Audience terdeteksi. Titik dan garis saraf mengikuti gerakan.');
 
     if (referenceLandmarks) {
@@ -741,9 +786,19 @@ if (exportRefsBtn) exportRefsBtn.addEventListener('click', exportSavedRefs);
 if (importRefsInput) importRefsInput.addEventListener('change', (e) => {
   if (!e.target.files || e.target.files.length === 0) return; importSavedRefs(e.target.files[0]);
 });
-if (therapyAction) therapyAction.addEventListener('change', syncPatientSummary);
+if (therapyAction) {
+  therapyAction.addEventListener('change', () => {
+    syncPatientSummary();
+    tryAutoLoadReferenceForCamera();
+  });
+}
 if (therapyResult) therapyResult.addEventListener('change', syncPatientSummary);
-if (jointMovement) jointMovement.addEventListener('change', syncPatientSummary);
+if (jointMovement) {
+  jointMovement.addEventListener('change', () => {
+    syncPatientSummary();
+    tryAutoLoadReferenceForCamera();
+  });
+}
 
 // load saved refs on startup
 try {

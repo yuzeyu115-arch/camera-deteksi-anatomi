@@ -375,6 +375,133 @@
       gap: 8px;
       align-items: center;
     }
+    .app-shell {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      padding: 16px;
+    }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 20px;
+      border-radius: 16px;
+      background: rgba(45, 45, 60, 0.75);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(10px);
+    }
+    .page-heading {
+      font-size: 24px;
+      font-weight: 700;
+      color: #6d5cff;
+      margin-bottom: 4px;
+    }
+    .page-subtitle {
+      color: #aaa;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .tab-switch {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .tab-btn {
+      min-width: 140px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.07);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .tab-btn.active {
+      background: linear-gradient(135deg, #6d5cff, #8b7cff);
+      box-shadow: 0 8px 20px rgba(109,92,255,0.25);
+    }
+    .page-panel {
+      display: none;
+    }
+    .page-panel.active {
+      display: block;
+    }
+    .divider {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent);
+      margin: 12px 0;
+    }
+    .camera-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+    .reference-hint {
+      margin-top: 10px;
+      font-size: 12px;
+      color: #7ee7ff;
+      line-height: 1.5;
+    }
+    .upload-box {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 16px;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.06);
+      border: 1px dashed rgba(255,255,255,0.2);
+      color: #fff;
+      cursor: pointer;
+      width: 100%;
+      margin-bottom: 8px;
+    }
+    .upload-box input {
+      display: none;
+    }
+    .admin-hint {
+      color: #aaa;
+      font-size: 12px;
+      margin-bottom: 12px;
+    }
+    .gallery-strip {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 6px 0;
+    }
+    .gallery-strip img,
+    .gallery-grid img {
+      border-radius: 10px;
+      object-fit: cover;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: #000;
+    }
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 10px;
+    }
+    .gallery-item {
+      padding: 8px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .gallery-item img {
+      width: 100%;
+      height: 110px;
+      display: block;
+      margin-bottom: 6px;
+    }
+    .gallery-item .gallery-name {
+      font-size: 11px;
+      color: #ddd;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     @media (max-width: 1200px) {
       .container {
         flex-direction: column;
@@ -499,158 +626,148 @@
   </style>
 </head>
 <body>
-  <div class="container">
-    <!-- SIDEBAR - Panel Kontrol Utama -->
-    <div class="sidebar">
-      <div class="section-card">
-        <div class="section-title">⚙️ Opsi Aksi Terapi</div>
-        <select id="therapyAction" class="select-field">
-          <option value="">Pilih Aksi Terapi</option>
-          <option value="posture">Perbaikan Postur</option>
-          <option value="range">Rentang Gerak Sendi</option>
-          <option value="strength">Latihan Kekuatan</option>
-          <option value="balance">Keseimbangan</option>
-          <option value="flexibility">Fleksibilitas</option>
-          <option value="gait">Analisis Berjalan</option>
-          <option value="coordination">Koordinasi Gerakan</option>
-        </select>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <div class="page-heading">HALAMAN PASIEN</div>
+        <p class="page-subtitle">Isi data pasien, pilih opsi terapi, lihat layar kamera, lalu lihat pencocokan langsung dari foto referensi.</p>
       </div>
-
-      <div class="section-card">
-        <div class="section-title">🦴 Pergerakan Sendi</div>
-        <select id="jointMovement" class="select-field">
-          <option value="">Pilih Sendi</option>
-          <option value="shoulder">Bahu (Shoulder)</option>
-          <option value="elbow">Siku (Elbow)</option>
-          <option value="wrist">Pergelangan Tangan</option>
-          <option value="hip">Pinggul (Hip)</option>
-          <option value="knee">Lutut (Knee)</option>
-          <option value="ankle">Pergelangan Kaki</option>
-          <option value="neck">Leher (Neck)</option>
-          <option value="spine">Tulang Belakang</option>
-        </select>
+      <div class="tab-switch" role="tablist" aria-label="Navigasi halaman">
+        <button id="patientTabBtn" class="tab-btn active" type="button">HALAMAN PASIEN</button>
+        <button id="adminTabBtn" class="tab-btn" type="button">HALAMAN ADMIN</button>
       </div>
+    </header>
 
-      <div class="section-card">
-        <div class="section-title">👤 Info Pasien</div>
-        <div class="patient-info">
-          <input type="text" id="patientName" class="select-field" placeholder="Nama Pasien" />
-          <input type="text" id="patientAge" class="select-field" placeholder="Usia" />
-          <input type="text" id="therapySession" class="select-field" placeholder="Sesi #1" />
-          <input type="date" id="sessionDate" class="select-field" />
+    <div id="patientPage" class="page-panel active">
+      <div class="container">
+        <div class="sidebar">
+          <div class="section-card">
+            <div class="section-title">👤 Data Pasien</div>
+            <div class="patient-info">
+              <input type="text" id="patientName" class="select-field" placeholder="Nama Pasien" />
+              <input type="text" id="patientAge" class="select-field" placeholder="Usia" />
+              <input type="text" id="therapySession" class="select-field" placeholder="Sesi #1" />
+              <input type="date" id="sessionDate" class="select-field" />
+            </div>
+            <div class="divider"></div>
+            <div class="section-title">⚙️ Opsi Aksi Terapi</div>
+            <select id="therapyAction" class="select-field">
+              <option value="">Pilih Aksi Terapi</option>
+              <option value="posture">Perbaikan Postur</option>
+              <option value="range">Rentang Gerak Sendi</option>
+              <option value="strength">Latihan Kekuatan</option>
+              <option value="balance">Keseimbangan</option>
+              <option value="flexibility">Fleksibilitas</option>
+              <option value="gait">Analisis Berjalan</option>
+              <option value="coordination">Koordinasi Gerakan</option>
+            </select>
+            <div class="divider"></div>
+            <div class="section-title">🏁 Opsi Hasil Terapi</div>
+            <select id="therapyResult" class="select-field">
+              <option value="">Pilih Hasil Terapi</option>
+              <option value="baik">Baik</option>
+              <option value="cukup">Cukup</option>
+              <option value="perlu-perbaikan">Perlu Perbaikan</option>
+            </select>
+            <div class="divider"></div>
+            <div class="section-title">🦴 Pergerakan Sendi</div>
+            <select id="jointMovement" class="select-field">
+              <option value="">Pilih Sendi</option>
+              <option value="shoulder">Bahu (Shoulder)</option>
+              <option value="elbow">Siku (Elbow)</option>
+              <option value="wrist">Pergelangan Tangan</option>
+              <option value="hip">Pinggul (Hip)</option>
+              <option value="knee">Lutut (Knee)</option>
+              <option value="ankle">Pergelangan Kaki</option>
+              <option value="neck">Leher (Neck)</option>
+              <option value="spine">Tulang Belakang</option>
+            </select>
+          </div>
+
         </div>
-      </div>
 
-      <div class="section-card">
-        <div class="section-title">📸 Foto Referensi</div>
-        <label style="color:#ddd;font-size:13px;display:flex;gap:8px;align-items:center;cursor:pointer;">
-          <input id="refUpload" type="file" accept="image/*" style="display:none;" multiple />
-          <span>📁 Unggah Foto</span>
-        </label>
-        <button id="setRefBtn" class="button-start" style="width:100%;margin-top:8px;">Gunakan Foto</button>
-        <button id="saveRefBtn" class="button-start" style="width:100%;margin-top:4px;">💾 Simpan</button>
-      </div>
+        <div class="main-content">
+          <div class="section-card">
+            <div class="section-title">📹 Layar Kamera</div>
+            <div class="video-card">
+              <video id="input_video" playsinline autoplay muted></video>
+              <canvas id="output_canvas"></canvas>
+              <div id="status" class="overlay">Klik "Mulai" untuk mengaktifkan kamera.</div>
+            </div>
+            <div class="camera-actions">
+              <button id="startBtnSecondary" class="button-start" type="button">▶️ Mulai</button>
+              <button id="stopBtnSecondary" class="button-pause" type="button">⏹️ Berhenti</button>
+            </div>
+            <div class="reference-hint">Foto referensi digunakan sebagai acuan, lalu pencocokan langsung muncul di layar kamera saat deteksi berjalan.</div>
+          </div>
 
-      <div class="section-card">
-        <div class="section-title">⚡ Kontrol</div>
-        <button id="startBtn" class="button-start" style="width:100%;">▶️ Mulai Kamera</button>
-        <button id="stopBtn" class="button-pause" style="width:100%;margin-top:8px;">⏹️ Berhenti</button>
-      </div>
+          <div class="section-card">
+            <div class="section-title">📌 Ringkasan Pemantauan</div>
+            <div class="distance-metrics">
+              <div class="metric-item"><span class="metric-label">Aksi Terapi</span><span class="metric-value" id="summaryTherapy">-</span></div>
+              <div class="metric-item"><span class="metric-label">Hasil Terapi</span><span class="metric-value" id="summaryResult">-</span></div>
+              <div class="metric-item"><span class="metric-label">Sendi Dipantau</span><span class="metric-value" id="summaryJoint">-</span></div>
+            </div>
+          </div>
 
-      <div class="section-card">
-        <div class="section-title">🔧 Pengaturan</div>
-        <label style="color:#ddd;font-size:13px;display:flex;gap:8px;align-items:center;">
-          <input id="mirrorToggle" type="checkbox" />
-          <span>Mirror</span>
-        </label>
-        <label style="color:#ddd;font-size:13px;display:flex;gap:8px;align-items:center;margin-top:8px;">
-          <span>Threshold:</span>
-          <input id="thresholdSlider" type="range" min="10" max="95" value="70" style="flex:1;" />
-          <div id="thresholdLabel" style="color:#fff;font-weight:600;min-width:45px;text-align:center;">70%</div>
-        </label>
-        <button id="clearSavedBtn" class="button-danger" style="width:100%;margin-top:8px;">Hapus Semua</button>
+          <div class="grid-2">
+            <div class="section-card">
+              <div class="section-title">📊 Akurasi Deteksi</div>
+              <div class="accuracy-display">
+                <div class="accuracy-value" id="accuracyValue">---%</div>
+                <div class="accuracy-bar">
+                  <div class="accuracy-bar-fill" id="accuracyBarFill"></div>
+                </div>
+                <div class="accuracy-label">Kualitas Deteksi Skeleton</div>
+                <div id="accuracyResult" style="color:#aaa;font-size:12px;text-align:center;">Menunggu pencocokan otomatis dari foto referensi admin.</div>
+              </div>
+            </div>
+
+            <div class="section-card">
+              <div class="section-title">📏 Metrik Jarak Sendi</div>
+              <div class="distance-metrics">
+                <div class="metric-item">
+                  <span class="metric-label">Jarak Referensi:</span>
+                  <span class="metric-value" id="distRef">--</span>
+                </div>
+                <div class="metric-item">
+                  <span class="metric-label">Jarak Saat Ini:</span>
+                  <span class="metric-value" id="distCurrent">--</span>
+                </div>
+                <div class="metric-item">
+                  <span class="metric-label">Perbedaan:</span>
+                  <span class="metric-value" id="distDiff">--</span>
+                </div>
+                <div class="metric-item">
+                  <span class="metric-label">Nilai Kecocokan:</span>
+                  <span class="metric-value" id="matchScore">0/100</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-card">
+            <div class="section-title">📈 Grafik Akurasi Real-time</div>
+            <div class="chart-container">
+              <canvas id="accuracyChart"></canvas>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- MAIN CONTENT -->
-    <div class="main-content">
-      <!-- Header -->
-      <div>
-        <div class="title">🎯 Sistem Deteksi Anatomi & Tracking Terapi</div>
-        <p style="color:#aaa;font-size:13px;margin-top:4px;">Real-time skeleton detection dengan akurasi gerakan</p>
-      </div>
-
-      <!-- Video Feed -->
+    <div id="adminPage" class="page-panel">
       <div class="section-card">
-        <div class="section-title">📹 Feed Kamera Live</div>
-        <div class="video-card">
-          <video id="input_video" playsinline autoplay muted></video>
-          <canvas id="output_canvas"></canvas>
-          <div id="status" class="overlay">Klik "Mulai Kamera" untuk mengaktifkan kamera.</div>
-        </div>
-      </div>
-
-      <!-- Stats Row -->
-      <div class="grid-2">
-        <!-- Accuracy Display -->
-        <div class="section-card">
-          <div class="section-title">📊 Akurasi Deteksi</div>
-          <div class="accuracy-display">
-            <div class="accuracy-value" id="accuracyValue">---%</div>
-            <div class="accuracy-bar">
-              <div class="accuracy-bar-fill" id="accuracyBarFill"></div>
-            </div>
-            <div class="accuracy-label">Kualitas Deteksi Skeleton</div>
-          </div>
-        </div>
-
-        <!-- Distance Metrics -->
-        <div class="section-card">
-          <div class="section-title">📏 Metrik Jarak Sendi</div>
-          <div class="distance-metrics">
-            <div class="metric-item">
-              <span class="metric-label">Jarak Referensi:</span>
-              <span class="metric-value" id="distRef">--</span>
-            </div>
-            <div class="metric-item">
-              <span class="metric-label">Jarak Saat Ini:</span>
-              <span class="metric-value" id="distCurrent">--</span>
-            </div>
-            <div class="metric-item">
-              <span class="metric-label">Perbedaan:</span>
-              <span class="metric-value" id="distDiff">--</span>
-            </div>
-            <div class="metric-item">
-              <span class="metric-label">Nilai Kecocokan:</span>
-              <span class="metric-value" id="matchScore">0/100</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Reference & Chart Row -->
-      <div class="grid-2">
-        <!-- Reference Photo -->
-        <div class="section-card">
-          <div class="section-title">🖼️ Foto Referensi</div>
-          <canvas id="refCanvas" width="240" height="180" style="background:#000;border-radius:8px;border:1px solid rgba(255,255,255,0.1);width:100%;height:auto;display:block;"></canvas>
-          <div id="accuracyResult" style="color:#aaa;font-size:12px;margin-top:8px;text-align:center;">Belum ada foto referensi.</div>
-        </div>
-
-        <!-- Chart -->
-        <div class="section-card">
-          <div class="section-title">📈 Grafik Akurasi Real-time</div>
-          <div class="chart-container">
-            <canvas id="accuracyChart"></canvas>
-          </div>
-        </div>
-      </div>
-
-      <!-- Thumbnails -->
-      <div class="section-card">
-        <div class="section-title">🔖 Foto Tersimpan</div>
-        <div id="savedContainer" style="display:flex;gap:8px;overflow-x:auto;padding:6px;"></div>
-        <div id="thumbnailsContainer" style="display:flex;gap:8px;overflow-x:auto;padding:6px;margin-top:8px;"></div>
+        <div class="section-title">🛠️ HALAMAN ADMIN</div>
+        <div class="section-title">📷 Foto Referensi 15-20 Foto</div>
+        <label class="upload-box">
+          <input id="adminRefUpload" type="file" accept="image/*" multiple />
+          <span>Unggah 15-20 foto referensi</span>
+        </label>
+        <div class="admin-hint">Foto yang diunggah akan tampil di galeri admin dan dapat dipakai sebagai acuan pencocokan.</div>
+        <div class="divider"></div>
+        <div class="section-title">🖼️ Galeri Foto Tersimpan</div>
+        <div id="adminGallery" class="gallery-grid"></div>
       </div>
     </div>
   </div>

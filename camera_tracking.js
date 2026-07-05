@@ -12,13 +12,26 @@ const accuracyResult = document.getElementById('accuracyResult');
 const thumbnailsContainer = document.getElementById('thumbnailsContainer');
 const thresholdSlider = document.getElementById('thresholdSlider');
 const thresholdLabel = document.getElementById('thresholdLabel');
-const mirrorToggle = document.getElementById('mirrorToggle');
 const saveRefBtn = document.getElementById('saveRefBtn');
 const savedContainer = document.getElementById('savedContainer');
 const clearSavedBtn = document.getElementById('clearSavedBtn');
 const exportRefsBtn = document.getElementById('exportRefsBtn');
 const importRefsInput = document.getElementById('importRefsInput');
 const forceNoMirrorBtn = document.getElementById('forceNoMirrorBtn');
+const patientTabBtn = document.getElementById('patientTabBtn');
+const adminTabBtn = document.getElementById('adminTabBtn');
+const patientPage = document.getElementById('patientPage');
+const adminPage = document.getElementById('adminPage');
+const adminRefUpload = document.getElementById('adminRefUpload');
+const adminGallery = document.getElementById('adminGallery');
+const startBtnSecondary = document.getElementById('startBtnSecondary');
+const stopBtnSecondary = document.getElementById('stopBtnSecondary');
+const summaryTherapy = document.getElementById('summaryTherapy');
+const summaryResult = document.getElementById('summaryResult');
+const summaryJoint = document.getElementById('summaryJoint');
+const therapyAction = document.getElementById('therapyAction');
+const therapyResult = document.getElementById('therapyResult');
+const jointMovement = document.getElementById('jointMovement');
 let mediaStream = null;
 let isRunning = false;
 let animationFrameId = null;
@@ -36,9 +49,17 @@ function updateStatus(message, isError = false) {
   console.log('[STATUS]', message);
 }
 
+function syncPatientSummary() {
+  if (summaryTherapy) summaryTherapy.textContent = therapyAction?.value || '-';
+  if (summaryResult) summaryResult.textContent = therapyResult?.value || '-';
+  if (summaryJoint) summaryJoint.textContent = jointMovement?.value || '-';
+}
+
 function setButtons() {
-  startBtn.textContent = isRunning ? 'Jeda' : 'Mulai Kamera';
-  stopBtn.disabled = !isRunning;
+  if (startBtn) startBtn.textContent = isRunning ? 'Jeda' : 'Mulai';
+  if (stopBtn) stopBtn.disabled = !isRunning;
+  if (startBtnSecondary) startBtnSecondary.textContent = isRunning ? 'Jeda' : '▶️ Mulai';
+  if (stopBtnSecondary) stopBtnSecondary.disabled = !isRunning;
 }
 
 async function getCameraPermissionState() {
@@ -193,6 +214,7 @@ function saveCurrentReferenceToLocal() {
     saved.push({ name: `ref-${Date.now()}`, image: dataUrl, landmarks: referenceLandmarks });
     localStorage.setItem('savedPoseRefs', JSON.stringify(saved));
     renderSavedRefs();
+    renderAdminGallery();
     updateStatus('Referensi disimpan ke browser.', false);
   } catch (e) {
     console.error('save error', e);
@@ -200,21 +222,85 @@ function saveCurrentReferenceToLocal() {
   }
 }
 
+function loadReferenceFromDataUrl(dataUrl, fallbackName = '') {
+  const img = new Image();
+  img.onload = () => {
+    referenceImage = img;
+    if (poseRef && typeof poseRef.send === 'function') {
+      poseRef.send({ image: img });
+    } else {
+      updateStatus('Pose reference tidak tersedia.', true);
+    }
+  };
+  img.onerror = () => updateStatus('Gagal memuat foto referensi.', true);
+  img.src = dataUrl;
+  if (fallbackName) {
+    updateStatus(`Referensi ${fallbackName} dipakai untuk pencocokan otomatis.`, false);
+  }
+}
+
+function autoLoadFirstReference() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('savedPoseRefs') || '[]');
+    const first = saved.find((item) => item && item.image);
+    if (first) {
+      loadReferenceFromDataUrl(first.image, first.name || 'pertama');
+    }
+  } catch (error) {
+    console.warn('autoLoadFirstReference failed', error);
+  }
+}
+
+function renderAdminGallery() {
+  if (!adminGallery) return;
+  const saved = JSON.parse(localStorage.getItem('savedPoseRefs') || '[]');
+  adminGallery.innerHTML = '';
+  if (!saved.length) {
+    adminGallery.innerHTML = '<div class="admin-hint">Belum ada foto referensi tersimpan.</div>';
+    return;
+  }
+  saved.forEach((item, idx) => {
+    const card = document.createElement('div');
+    card.className = 'gallery-item';
+    card.style.cursor = 'pointer';
+    card.title = item.name || `Referensi ${idx + 1}`;
+    const img = document.createElement('img');
+    img.src = item.image;
+    img.alt = item.name || `referensi-${idx + 1}`;
+    const label = document.createElement('div');
+    label.className = 'gallery-name';
+    label.textContent = item.name || `Referensi ${idx + 1}`;
+    card.addEventListener('click', () => loadReferenceFromDataUrl(item.image, item.name || `Referensi ${idx + 1}`));
+    card.appendChild(img);
+    card.appendChild(label);
+    adminGallery.appendChild(card);
+  });
+}
+
 function renderSavedRefs() {
   if (!savedContainer) return;
   const saved = JSON.parse(localStorage.getItem('savedPoseRefs') || '[]');
   savedContainer.innerHTML = '';
+  if (!saved.length) {
+    savedContainer.innerHTML = '<div class="admin-hint">Belum ada foto referensi tersimpan.</div>';
+    return;
+  }
   saved.forEach((item, idx) => {
+    const card = document.createElement('div');
+    card.className = 'gallery-item';
+    card.style.cursor = 'pointer';
+    card.tabIndex = 0;
+    card.title = item.name || `Referensi ${idx + 1}`;
+
     const img = document.createElement('img');
     img.src = item.image;
-    img.style.width = '80px';
-    img.style.height = '60px';
-    img.style.objectFit = 'cover';
-    img.style.borderRadius = '6px';
-    img.style.cursor = 'pointer';
-    img.title = item.name;
-    img.addEventListener('click', () => {
-      // load as active reference
+    img.alt = item.name || `Referensi ${idx + 1}`;
+
+    const label = document.createElement('div');
+    label.className = 'gallery-name';
+    label.textContent = item.name || `Referensi ${idx + 1}`;
+
+    const loadReference = () => {
       const im = new Image();
       im.onload = () => {
         referenceImage = im;
@@ -226,17 +312,33 @@ function renderSavedRefs() {
           refCtx.clearRect(0, 0, refCanvasEl.width, refCanvasEl.height);
           refCtx.drawImage(im, 0, 0, refCanvasEl.width, refCanvasEl.height);
         }
-        updateStatus('Referensi dimuat dari penyimpanan lokal.', false);
+        updateStatus('Referensi dimuat dari galeri tersimpan.', false);
+        if (referenceLandmarks) {
+          const percent = computePoseSimilarity(referenceLandmarks, results.poseLandmarks || []);
+          updateAccuracyDisplay(percent);
+        }
       };
       im.src = item.image;
+    };
+
+    card.addEventListener('click', loadReference);
+    card.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        loadReference();
+      }
     });
-    savedContainer.appendChild(img);
+
+    card.appendChild(img);
+    card.appendChild(label);
+    savedContainer.appendChild(card);
   });
 }
 
 function clearSavedRefs() {
   localStorage.removeItem('savedPoseRefs');
   renderSavedRefs();
+  renderAdminGallery();
   updateStatus('Semua referensi tersimpan dihapus.', false);
 }
 
@@ -350,14 +452,15 @@ function calculateJointDistances(landmarks) {
 }
 
 function updateAccuracyDisplay(percent) {
-  if (!accuracyResult) return;
-  const pass = percent >= similarityThreshold;
-  accuracyResult.textContent = `Presisi: ${percent.toFixed(1)}% — ${pass ? 'Benar' : 'Salah'}`;
-  accuracyResult.style.color = pass ? '#8cff7a' : '#ff8c8c';
+  const safePercent = Number.isFinite(percent) ? percent : 0;
+  if (accuracyResult) {
+    const pass = safePercent >= similarityThreshold;
+    accuracyResult.textContent = `Presisi: ${safePercent.toFixed(1)}% — ${pass ? 'Benar' : 'Salah'}`;
+    accuracyResult.style.color = pass ? '#8cff7a' : '#ff8c8c';
+  }
   
-  // Also update the enhanced UI if available
   if (window.EnhancedUI && window.EnhancedUI.updateAccuracyDisplay) {
-    window.EnhancedUI.updateAccuracyDisplay(percent);
+    window.EnhancedUI.updateAccuracyDisplay(safePercent);
   }
 }
 
@@ -535,18 +638,17 @@ if (setRefBtn) {
   });
 }
 
-if (thresholdSlider && thresholdLabel) {
-  thresholdSlider.addEventListener('input', (e) => {
-    similarityThreshold = Number(e.target.value);
-    thresholdLabel.textContent = `${similarityThreshold}%`;
-  });
+function syncThreshold(value) {
+  similarityThreshold = Number(value);
+  if (thresholdLabel) thresholdLabel.textContent = `${similarityThreshold}%`;
+  if (thresholdLabelSecondary) thresholdLabelSecondary.textContent = `${similarityThreshold}%`;
+  if (thresholdSlider) thresholdSlider.value = `${similarityThreshold}`;
+  if (thresholdSliderSecondary) thresholdSliderSecondary.value = `${similarityThreshold}`;
 }
 
-if (mirrorToggle) {
-  mirrorToggle.addEventListener('change', (e) => {
-    mirrorCanvas = !!e.target.checked;
-    try { localStorage.setItem('mirrorPref', mirrorCanvas ? 'true' : 'false'); } catch (err) { console.warn('mirror save failed', err); }
-  });
+function syncMirrorState(value) {
+  mirrorCanvas = !!value;
+  try { localStorage.setItem('mirrorPref', mirrorCanvas ? 'true' : 'false'); } catch (err) { console.warn('mirror save failed', err); }
 }
 
 if (forceNoMirrorBtn) {
@@ -564,12 +666,20 @@ if (exportRefsBtn) exportRefsBtn.addEventListener('click', exportSavedRefs);
 if (importRefsInput) importRefsInput.addEventListener('change', (e) => {
   if (!e.target.files || e.target.files.length === 0) return; importSavedRefs(e.target.files[0]);
 });
+if (therapyAction) therapyAction.addEventListener('change', syncPatientSummary);
+if (therapyResult) therapyResult.addEventListener('change', syncPatientSummary);
+if (jointMovement) jointMovement.addEventListener('change', syncPatientSummary);
 
 // load saved refs on startup
-try { renderSavedRefs(); } catch (e) { console.warn('renderSavedRefs failed', e); }
+try {
+  renderSavedRefs();
+  renderAdminGallery();
+  autoLoadFirstReference();
+} catch (e) { console.warn('renderSavedRefs failed', e); }
 
 // initialize UI state
-if (thresholdLabel) thresholdLabel.textContent = `${similarityThreshold}%`;
+syncThreshold(similarityThreshold);
+syncPatientSummary();
 // load mirror preference from localStorage
 try {
   const savedMirror = localStorage.getItem('mirrorPref');
@@ -577,7 +687,29 @@ try {
     mirrorCanvas = savedMirror === 'true';
   }
 } catch (e) { console.warn('localStorage mirror read failed', e); }
-if (mirrorToggle) mirrorToggle.checked = !!mirrorCanvas;
+
+if (adminRefUpload) {
+  adminRefUpload.addEventListener('change', (e) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const images = Array.from(files).slice(0, 20);
+    const saved = JSON.parse(localStorage.getItem('savedPoseRefs') || '[]');
+    images.forEach((file, index) => {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        saved.push({ name: file.name || `admin-ref-${index + 1}`, image: ev.target.result, landmarks: null });
+        if (saved.length === images.length) {
+          localStorage.setItem('savedPoseRefs', JSON.stringify(saved));
+          renderSavedRefs();
+          renderAdminGallery();
+          autoLoadFirstReference();
+          updateStatus('Foto admin tersimpan ke galeri referensi.', false);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  });
+}
 
 async function startCamera() {
   const permState = await getCameraPermissionState();
@@ -624,6 +756,10 @@ async function startCamera() {
     setButtons();
     updateStatus('Kamera aktif. Live tracking berjalan...');
 
+    if (referenceLandmarks) {
+      updateAccuracyDisplay(computePoseSimilarity(referenceLandmarks, results.poseLandmarks || []));
+    }
+
     startLiveProcessing();
   } catch (error) {
     console.error('camera start error', error);
@@ -652,8 +788,29 @@ function stopCamera() {
   updateStatus('Kamera berhenti. Klik Mulai Kamera untuk memulai ulang.');
 }
 
-startBtn.addEventListener('click', startCamera);
-stopBtn.addEventListener('click', stopCamera);
+function switchPage(target) {
+  if (patientPage && adminPage) {
+    patientPage.classList.toggle('active', target === 'patient');
+    adminPage.classList.toggle('active', target === 'admin');
+  }
+  if (patientTabBtn && adminTabBtn) {
+    patientTabBtn.classList.toggle('active', target === 'patient');
+    adminTabBtn.classList.toggle('active', target === 'admin');
+  }
+}
+
+if (patientTabBtn) patientTabBtn.addEventListener('click', () => switchPage('patient'));
+if (adminTabBtn) adminTabBtn.addEventListener('click', () => switchPage('admin'));
+
+if (startBtnSecondary) {
+  startBtnSecondary.addEventListener('click', startCamera);
+}
+if (stopBtnSecondary) {
+  stopBtnSecondary.addEventListener('click', stopCamera);
+}
+
+if (startBtn) startBtn.addEventListener('click', startCamera);
+if (stopBtn) stopBtn.addEventListener('click', stopCamera);
 setButtons();
 
 // setRefBtn handled earlier (loads selected thumbnail)

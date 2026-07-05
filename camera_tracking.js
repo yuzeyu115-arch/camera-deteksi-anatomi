@@ -12,12 +12,16 @@ const accuracyResult = document.getElementById('accuracyResult');
 const thumbnailsContainer = document.getElementById('thumbnailsContainer');
 const thresholdSlider = document.getElementById('thresholdSlider');
 const thresholdLabel = document.getElementById('thresholdLabel');
+const thresholdSliderSecondary = document.getElementById('thresholdSliderSecondary');
+const thresholdLabelSecondary = document.getElementById('thresholdLabelSecondary');
 const saveRefBtn = document.getElementById('saveRefBtn');
 const savedContainer = document.getElementById('savedContainer');
 const clearSavedBtn = document.getElementById('clearSavedBtn');
 const exportRefsBtn = document.getElementById('exportRefsBtn');
 const importRefsInput = document.getElementById('importRefsInput');
 const forceNoMirrorBtn = document.getElementById('forceNoMirrorBtn');
+const pageHeading = document.querySelector('.page-heading');
+const pageSubtitle = document.querySelector('.page-subtitle');
 const patientTabBtn = document.getElementById('patientTabBtn');
 const adminTabBtn = document.getElementById('adminTabBtn');
 const patientPage = document.getElementById('patientPage');
@@ -796,6 +800,15 @@ function switchPage(target) {
   if (patientTabBtn && adminTabBtn) {
     patientTabBtn.classList.toggle('active', target === 'patient');
     adminTabBtn.classList.toggle('active', target === 'admin');
+  }
+  if (pageHeading && pageSubtitle) {
+    if (target === 'admin') {
+      pageHeading.textContent = 'HALAMAN ADMIN';
+      pageSubtitle.textContent = 'Atur foto referensi, pilih hasil terapi, dan kelola galeri referensi untuk pasien.';
+    } else {
+      pageHeading.textContent = 'HALAMAN PASIEN';
+      pageSubtitle.textContent = 'Isi data pasien, pilih opsi terapi, lihat layar kamera, dan lihat akurasi secara otomatis.';
+    }
   }
 }
 

@@ -71,7 +71,6 @@
         z-index: auto;
         padding: 8px;
         gap: 8px;
-        margin-top: 100vh;
         background: linear-gradient(135deg, #0f0f1e 0%, #1a1a2e 100%);
         border-top: 1px solid rgba(255, 255, 255, 0.08);
         order: 2;
@@ -79,6 +78,7 @@
       .main-content {
         gap: 12px;
         order: 1;
+        padding-top: 0;
       }
       .container {
         flex-direction: column;
@@ -409,6 +409,41 @@
       gap: 8px;
       flex-wrap: wrap;
     }
+    .app-shell {
+      width: 100%;
+      max-width: 1400px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      padding: 16px;
+    }
+    .page-heading {
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 4px;
+      color: #6d5cff;
+    }
+    .page-subtitle {
+      color: #aaa;
+      font-size: 13px;
+      line-height: 1.5;
+      max-width: 680px;
+    }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
     .tab-btn {
       min-width: 140px;
       padding: 10px 14px;
@@ -416,6 +451,7 @@
       background: rgba(255,255,255,0.07);
       color: #fff;
       border: 1px solid rgba(255,255,255,0.08);
+      cursor: pointer;
     }
     .tab-btn.active {
       background: linear-gradient(135deg, #6d5cff, #8b7cff);
@@ -423,6 +459,7 @@
     }
     .page-panel {
       display: none;
+      width: 100%;
     }
     .page-panel.active {
       display: block;
@@ -622,6 +659,20 @@
       .accuracy-display {
         gap: 10px;
       }
+      .topbar {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .tab-switch {
+        width: 100%;
+      }
+      .container,
+      .section-card {
+        width: 100%;
+      }
+      .sidebar {
+        width: 100%;
+      }
     }
   </style>
 </head>
@@ -660,14 +711,6 @@
               <option value="flexibility">Fleksibilitas</option>
               <option value="gait">Analisis Berjalan</option>
               <option value="coordination">Koordinasi Gerakan</option>
-            </select>
-            <div class="divider"></div>
-            <div class="section-title">🏁 Opsi Hasil Terapi</div>
-            <select id="therapyResult" class="select-field">
-              <option value="">Pilih Hasil Terapi</option>
-              <option value="baik">Baik</option>
-              <option value="cukup">Cukup</option>
-              <option value="perlu-perbaikan">Perlu Perbaikan</option>
             </select>
             <div class="divider"></div>
             <div class="section-title">🦴 Pergerakan Sendi</div>
@@ -765,6 +808,14 @@
           <span>Unggah 15-20 foto referensi</span>
         </label>
         <div class="admin-hint">Foto yang diunggah akan tampil di galeri admin dan dapat dipakai sebagai acuan pencocokan.</div>
+        <div class="divider"></div>
+        <div class="section-title">🏁 Opsi Hasil Terapi</div>
+        <select id="therapyResult" class="select-field">
+          <option value="">Pilih Hasil Terapi</option>
+          <option value="baik">Baik</option>
+          <option value="cukup">Cukup</option>
+          <option value="perlu-perbaikan">Perlu Perbaikan</option>
+        </select>
         <div class="divider"></div>
         <div class="section-title">🖼️ Galeri Foto Tersimpan</div>
         <div id="adminGallery" class="gallery-grid"></div>

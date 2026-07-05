@@ -199,16 +199,22 @@
     }
     video {
       position: absolute;
-      left: -9999px;
-      width: 1px;
-      height: 1px;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
       opacity: 0;
+      pointer-events: none;
+      z-index: 0;
     }
     canvas {
+      position: absolute;
+      inset: 0;
       width: 100%;
       height: 100%;
       display: block;
-      background: #000;
+      background: transparent;
+      z-index: 1;
     }
     .grid-2 {
       display: grid;

@@ -87,20 +87,75 @@ function startLiveProcessing() {
 }
 
 function drawVideoFrame() {
-  if (!isRunning) return;
-  if (videoElement.videoWidth && videoElement.videoHeight) {
+  if (!isRunning || !videoElement || !canvasElement || !canvasCtx) return;
+
+  if (videoElement.readyState >= 2 && videoElement.videoWidth && videoElement.videoHeight) {
     canvasElement.width = videoElement.videoWidth;
     canvasElement.height = videoElement.videoHeight;
-    // apply mirror transform if enabled, otherwise reset
+
     if (mirrorCanvas) {
       canvasCtx.setTransform(-1, 0, 0, 1, canvasElement.width, 0);
     } else {
       canvasCtx.setTransform(1, 0, 0, 1, 0, 0);
     }
+
     canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
     canvasCtx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
   }
+
   animationFrameId = requestAnimationFrame(drawVideoFrame);
+}
+
+function prepareVideoElement() {
+  if (!videoElement) return;
+  videoElement.setAttribute('playsinline', 'true');
+  videoElement.setAttribute('autoplay', 'true');
+  videoElement.setAttribute('muted', 'true');
+  videoElement.playsInline = true;
+  videoElement.muted = true;
+}
+
+async function getCameraStream() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    throw new Error('Browser tidak mendukung akses kamera.');
+  }
+
+  const constraintSets = [
+    {
+      video: {
+        facingMode: { ideal: 'user' },
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      }
+    },
+    {
+      video: {
+        facingMode: 'user',
+        width: { ideal: 640 },
+        height: { ideal: 480 }
+      }
+    },
+    {
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      }
+    },
+    { video: true }
+  ];
+
+  let lastError = null;
+  for (const constraints of constraintSets) {
+    try {
+      return await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (error) {
+      lastError = error;
+      console.warn('Kunci kamera gagal, mencoba fallback:', error);
+    }
+  }
+
+  throw lastError || new Error('Tidak bisa mendapatkan akses kamera.');
 }
 
 const nerveConnections = [
@@ -143,6 +198,7 @@ function toCanvasPoint(landmark) {
 }
 
 function drawGlowPoint(point, color = '#ff4d6d', radius = 5) {
+  if (!canvasCtx || !point) return;
   const gradient = canvasCtx.createRadialGradient(point.x, point.y, 1, point.x, point.y, radius * 2);
   gradient.addColorStop(0, color);
   gradient.addColorStop(0.4, 'rgba(255,77,109,0.8)');
@@ -155,6 +211,25 @@ function drawGlowPoint(point, color = '#ff4d6d', radius = 5) {
   canvasCtx.fillStyle = '#fff';
   canvasCtx.arc(point.x, point.y, radius, 0, Math.PI * 2);
   canvasCtx.fill();
+}
+
+function drawFallbackPoseOverlay(landmarks) {
+  if (!canvasCtx || !landmarks || landmarks.length === 0) return;
+  const visible = landmarks.filter(Boolean);
+  if (!visible.length) return;
+
+  drawNerveLines(landmarks);
+
+  visible.forEach((landmark, index) => {
+    if (!landmark) return;
+    const point = toCanvasPoint(landmark);
+    drawGlowPoint(point, '#ff4d6d', 4);
+    if (landmarkLabels[index]) {
+      canvasCtx.font = '600 12px Poppins, sans-serif';
+      canvasCtx.fillStyle = 'rgba(255,255,255,0.95)';
+      canvasCtx.fillText(landmarkLabels[index].title, point.x + 8, point.y - 8);
+    }
+  });
 }
 
 function drawNerveLines(landmarks) {
@@ -191,8 +266,10 @@ function onReferenceResults(results) {
     refCtx.setTransform(1, 0, 0, 1, 0, 0);
     refCtx.clearRect(0, 0, refCanvasEl.width, refCanvasEl.height);
     refCtx.drawImage(results.image, 0, 0, refCanvasEl.width, refCanvasEl.height);
-    drawConnectors(refCtx, results.poseLandmarks, POSE_CONNECTIONS, { color: 'rgba(124,252,0,0.9)', lineWidth: 2 });
-    drawLandmarks(refCtx, results.poseLandmarks, { color: '#fff', lineWidth: 1, radius: 2 });
+    if (typeof drawConnectors === 'function' && typeof drawLandmarks === 'function') {
+      drawConnectors(refCtx, results.poseLandmarks, POSE_CONNECTIONS, { color: 'rgba(124,252,0,0.9)', lineWidth: 2 });
+      drawLandmarks(refCtx, results.poseLandmarks, { color: '#fff', lineWidth: 1, radius: 2 });
+    }
     try {
       const dataUrl = refCanvasEl.toDataURL('image/jpeg', 0.8);
       // store dataURL into current references entry if exists
@@ -501,7 +578,8 @@ function drawLabelSet(landmarks) {
 }
 
 function onResults(results) {
-  if (!results.image) return;
+  if (!results.image || !canvasElement || !canvasCtx) return;
+
   canvasElement.width = results.image.width;
   canvasElement.height = results.image.height;
   // apply transform first so image and annotations share same orientation
@@ -516,26 +594,20 @@ function onResults(results) {
 
   if (results.poseLandmarks) {
     const landmarks = results.poseLandmarks;
-    drawConnectors(canvasCtx, landmarks, POSE_CONNECTIONS, { color: 'rgba(255,255,255,0.25)', lineWidth: 2 });
-    drawNerveLines(landmarks);
-    drawLandmarks(canvasCtx, landmarks, { color: '#fff', lineWidth: 1, radius: 2 });
-    [0, 7, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28].forEach((index) => {
-      if (landmarks[index]) {
-        drawGlowPoint(toCanvasPoint(landmarks[index]), '#ff4d6d', 5);
-      }
-    });
+    if (typeof drawConnectors === 'function') {
+      drawConnectors(canvasCtx, landmarks, POSE_CONNECTIONS, { color: 'rgba(255,255,255,0.25)', lineWidth: 2 });
+    }
+    drawFallbackPoseOverlay(landmarks);
     drawLabelSet(landmarks);
     updateStatus('Audience terdeteksi. Titik dan garis saraf mengikuti gerakan.');
-    
-    // if a reference exists, compute similarity
+
     if (referenceLandmarks) {
       const percent = computePoseSimilarity(referenceLandmarks, landmarks);
       updateAccuracyDisplay(percent);
-      
-      // Calculate and update distance metrics
+
       const refDistances = calculateJointDistances(referenceLandmarks);
       const liveDistances = calculateJointDistances(landmarks);
-      
+
       if (window.EnhancedUI && window.EnhancedUI.updateDistanceMetrics) {
         window.EnhancedUI.updateDistanceMetrics(
           refDistances.avgDistance,
@@ -546,7 +618,6 @@ function onResults(results) {
     }
     canvasCtx.restore();
   } else {
-    // restore transform even when no landmarks
     canvasCtx.restore();
     updateStatus('Tidak ada audience yang terdeteksi. Silakan masuk ke frame kamera.');
   }
@@ -728,41 +799,37 @@ async function startCamera() {
     return;
   }
 
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    updateStatus('Browser tidak mendukung akses kamera. Gunakan Chrome atau Edge terbaru.', true);
+  if (!videoElement) {
+    updateStatus('Elemen video tidak tersedia. Muat ulang halaman dan coba lagi.', true);
     return;
   }
 
-  videoElement.muted = true;
+  prepareVideoElement();
 
   try {
-    const isMobile = /Mobi|Android/i.test(navigator.userAgent);
-    const preferPortrait = isMobile && window.innerHeight >= window.innerWidth;
-    const constraints = {
-      video: {
-        facingMode: { ideal: 'user' },
-        width: { ideal: isMobile ? 720 : 1280 },
-        height: { ideal: isMobile ? 1280 : 720 },
-        aspectRatio: preferPortrait ? 9 / 16 : 16 / 9
-      }
-    };
-    mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+    mediaStream = await getCameraStream();
     videoElement.srcObject = mediaStream;
     await videoElement.play();
-    if (videoElement.readyState < 2) {
-      await new Promise((resolve) => {
-        videoElement.addEventListener('loadeddata', resolve, { once: true });
-      });
+
+    await new Promise((resolve, reject) => {
+      const onLoaded = () => {
+        videoElement.removeEventListener('loadedmetadata', onLoaded);
+        videoElement.removeEventListener('loadeddata', onLoaded);
+        resolve();
+      };
+      videoElement.addEventListener('loadedmetadata', onLoaded, { once: true });
+      videoElement.addEventListener('loadeddata', onLoaded, { once: true });
+      setTimeout(onLoaded, 1000);
+    });
+
+    if (videoElement.videoWidth && videoElement.videoHeight) {
+      canvasElement.width = videoElement.videoWidth;
+      canvasElement.height = videoElement.videoHeight;
     }
-    await new Promise((resolve) => setTimeout(resolve, 200));
 
     isRunning = true;
     setButtons();
     updateStatus('Kamera aktif. Live tracking berjalan...');
-
-    if (referenceLandmarks) {
-      updateAccuracyDisplay(computePoseSimilarity(referenceLandmarks, results.poseLandmarks || []));
-    }
 
     startLiveProcessing();
   } catch (error) {
@@ -784,8 +851,15 @@ function stopCamera() {
     mediaStream.getTracks().forEach((track) => track.stop());
     mediaStream = null;
   }
-  if (videoElement.srcObject) {
-    videoElement.srcObject = null;
+  if (videoElement) {
+    try {
+      videoElement.pause();
+    } catch (error) {
+      console.warn('Gagal pause video', error);
+    }
+    if (videoElement.srcObject) {
+      videoElement.srcObject = null;
+    }
   }
   isRunning = false;
   setButtons();

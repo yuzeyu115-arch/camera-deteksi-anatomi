@@ -93,7 +93,7 @@
     @media (max-width: 480px) {
       .main-content {
         gap: 12px;
-        padding-top: 100vh;
+        padding-top: 0;
       }
     }
     .title {
@@ -168,34 +168,78 @@
       aspect-ratio: 16 / 9;
       min-height: 300px;
     }
+    .camera-reference-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin-top: 20px;
+      padding: 18px;
+      border-radius: 16px;
+      background: rgba(18, 20, 45, 0.92);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      width: 100%;
+    }
+    .camera-reference-panel .camera-ref-image {
+      width: 100%;
+      height: 130px;
+      object-fit: cover;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: #111;
+    }
+    .camera-reference-panel .camera-accuracy-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0;
+      width: 100%;
+    }
+    .camera-reference-panel .camera-accuracy-panel > div {
+      color: #f6f8ff;
+    }
+    .camera-reference-panel .camera-accuracy-value {
+      font-size: 26px;
+      font-weight: 700;
+      color: #7c5bff;
+    }
+    .camera-accuracy-result {
+      color: #cfcfe1;
+      font-size: 13px;
+      margin-top: 4px;
+      line-height: 1.5;
+    }
+    @media (max-width: 768px) {
+      .camera-reference-panel {
+        gap: 12px;
+        padding: 16px;
+      }
+      .camera-reference-panel .camera-ref-image {
+        height: 120px;
+      }
+      .camera-accuracy-panel {
+        gap: 6px;
+      }
+    }
     @media (max-width: 768px) {
       .video-card {
         aspect-ratio: unset;
         min-height: 0;
-        height: 90vh;
-        max-height: 90vh;
-        border-radius: 0;
+        height: 50vh;
+        max-height: 55vh;
+        border-radius: 18px;
         margin: 0;
         padding: 0;
-        box-shadow: none;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
         position: relative;
         width: 100%;
       }
       .main-content > .section-card:nth-child(2) {
-        margin-top: 90vh;
-      }
-      .camera-reference-panel {
-        width: calc(100% - 32px);
-        left: 16px;
-        right: 16px;
-      }
-      .camera-accuracy-panel {
-        gap: 8px;
+        margin-top: 0;
       }
       .overlay {
-        bottom: 18px;
-        left: 16px;
-        right: 16px;
+        bottom: 16px;
+        left: 14px;
+        right: 14px;
         font-size: 13px;
         padding: 12px 14px;
       }
@@ -203,16 +247,14 @@
     @media (max-width: 480px) {
       .video-card {
         aspect-ratio: unset;
-        min-height: 0;
-        height: 100vh;
-        max-height: 100vh;
-        border-radius: 0;
+        min-height: 320px;
+        height: min(52vh, 380px);
+        border-radius: 16px;
         margin: 0;
         padding: 0;
-        box-shadow: none;
+        box-shadow: 0 18px 36px rgba(0, 0, 0, 0.22);
         position: relative;
         width: 100%;
-        z-index: 1;
         overflow: hidden;
       }
       .main-content {
@@ -221,18 +263,13 @@
       .main-content > .section-card:nth-child(2) {
         margin-top: 0;
       }
-      .camera-reference-panel {
-        width: calc(100% - 32px);
-        left: 16px;
-        right: 16px;
-      }
       .camera-accuracy-panel {
         gap: 8px;
       }
       .overlay {
-        bottom: 18px;
-        left: 16px;
-        right: 16px;
+        bottom: 16px;
+        left: 14px;
+        right: 14px;
         font-size: 13px;
         padding: 12px 14px;
       }
@@ -640,49 +677,26 @@
         max-height: none;
       }
     }
-    .camera-reference-panel {
-      position: absolute;
-      top: 16px;
-      left: 16px;
-      width: 220px;
-      display: grid;
-      gap: 10px;
-      z-index: 2;
-      background: rgba(10, 10, 18, 0.85);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      border-radius: 16px;
-      padding: 12px;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
-      backdrop-filter: blur(12px);
-    }
-    .camera-ref-image {
-      width: 100%;
-      height: 110px;
-      object-fit: cover;
-      border-radius: 12px;
-      border: 1px solid rgba(255,255,255,0.08);
-      background: linear-gradient(135deg, #111, #222);
-    }
     .camera-accuracy-panel {
       display: grid;
-      gap: 6px;
+      gap: 8px;
       color: #fff;
     }
     .camera-accuracy-label {
       font-size: 11px;
       text-transform: uppercase;
-      letter-spacing: 0.1em;
+      letter-spacing: 0.06em;
       color: #9ca3af;
     }
     .camera-accuracy-value {
-      font-size: 20px;
+      font-size: 24px;
       font-weight: 700;
       color: #6d5cff;
     }
     .camera-accuracy-result {
-      font-size: 12px;
+      font-size: 13px;
       color: #d1d5db;
-      line-height: 1.4;
+      line-height: 1.5;
     }
     .overlay {
       position: absolute;
@@ -904,6 +918,18 @@
       <div class="container">
         <div class="sidebar">
           <div class="section-card">
+            <div class="section-title">� Foto Referensi</div>
+            <div id="cameraReferencePanel" class="camera-reference-panel">
+              <img id="cameraRefImage" class="camera-ref-image" src="" alt="Referensi" />
+              <div id="cameraAccuracyPanel" class="camera-accuracy-panel">
+                <div id="cameraAccuracyLabel">AKURASI DETEKSI</div>
+                <div id="cameraAccuracyValue" class="camera-accuracy-value">0.0%</div>
+                <div id="cameraAccuracyResult" class="camera-accuracy-result">Pilih aksi terapi dan sendi untuk memuat referensi.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-card">
             <div class="section-title">👤 Data Pasien</div>
             <div class="patient-info">
               <input type="text" id="patientName" class="select-field" placeholder="Nama Pasien" />
@@ -936,6 +962,7 @@
               <option value="neck">Leher (Neck)</option>
               <option value="spine">Tulang Belakang</option>
             </select>
+            <div class="divider"></div>
           </div>
 
         </div>
@@ -946,14 +973,6 @@
             <div class="video-card">
               <video id="input_video" playsinline autoplay muted></video>
               <canvas id="output_canvas"></canvas>
-              <div id="cameraReferencePanel" class="camera-reference-panel">
-                <img id="cameraRefImage" class="camera-ref-image" src="" alt="Referensi" />
-                <div id="cameraAccuracyPanel" class="camera-accuracy-panel">
-                  <div id="cameraAccuracyLabel">AKURASI DETEKSI</div>
-                  <div id="cameraAccuracyValue" class="camera-accuracy-value">0.0%</div>
-                  <div id="cameraAccuracyResult" class="camera-accuracy-result">Pilih aksi terapi dan sendi untuk memuat referensi.</div>
-                </div>
-              </div>
               <div id="status" class="overlay">Klik "Mulai" untuk mengaktifkan kamera.</div>
             </div>
             <div class="camera-actions">
@@ -1050,6 +1069,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js/dist/chart.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+  <script src="pose-tracker-enhanced.js"></script>
   <script src="enhanced-ui.js"></script>
   <script src="camera_tracking.js"></script>
 </body>

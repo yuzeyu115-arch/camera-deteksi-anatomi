@@ -160,6 +160,54 @@ function getPatientInfo() {
   };
 }
 
+// Update real-time tracking metrics
+function updateTrackingMetrics(metrics) {
+  if (!metrics) return;
+
+  // Create or update tracking status element
+  let trackingStatus = document.getElementById('trackingStatusMetrics');
+  if (!trackingStatus) {
+    trackingStatus = document.createElement('div');
+    trackingStatus.id = 'trackingStatusMetrics';
+    trackingStatus.style.cssText = `
+      position: fixed;
+      top: 60px;
+      right: 20px;
+      background: rgba(30, 30, 50, 0.8);
+      border: 1px solid rgba(109, 92, 255, 0.6);
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 11px;
+      color: #ddd;
+      font-family: 'Courier New', monospace;
+      z-index: 1000;
+      backdrop-filter: blur(10px);
+      min-width: 140px;
+    `;
+    document.body.appendChild(trackingStatus);
+  }
+
+  const fps = metrics.fps || 0;
+  const motion = metrics.motion || 0;
+  const confidence = (metrics.confidence * 100).toFixed(0);
+  const fpsColor = fps > 20 ? '#7cfc00' : fps > 15 ? '#ffff00' : '#ff6b6b';
+  
+  trackingStatus.innerHTML = `
+    <div style="margin-bottom: 4px;">
+      <strong>🎯 Tracking Status</strong>
+    </div>
+    <div style="color: ${fpsColor}; margin-bottom: 3px;">
+      FPS: <strong>${fps.toFixed(1)}</strong>
+    </div>
+    <div style="margin-bottom: 3px;">
+      Motion: <strong>${(motion * 1000).toFixed(1)}px</strong>
+    </div>
+    <div>
+      Conf: <strong>${confidence}%</strong>
+    </div>
+  `;
+}
+
 // Initialize Event Listeners
 document.addEventListener('DOMContentLoaded', () => {
   initAccuracyChart();
@@ -204,4 +252,5 @@ window.EnhancedUI = {
   getSelectedJoint,
   getPatientInfo,
   initAccuracyChart,
+  updateTrackingMetrics,
 };

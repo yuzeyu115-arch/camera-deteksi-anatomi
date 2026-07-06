@@ -61,6 +61,7 @@ let selectedRefIndex = -1;
 let similarityThreshold = 70;
 let mirrorCanvas = false;
 let latestPoseLandmarks = null;
+let poseTimeoutId = null;
 
 function updateStatus(message, isError = false) {
   statusElement.textContent = message;
@@ -124,11 +125,36 @@ let poseBusy = false;
 
 function startLiveProcessing() {
   if (!isRunning) return;
-  drawVideoFrame();
-  if (pose && typeof pose.send === 'function' && !poseBusy) {
-    poseBusy = true;
-    pose.send({ image: videoElement });
+  
+  // Send pose frame for processing
+  if (pose && typeof pose.send === 'function' && videoElement.readyState >= 2) {
+    if (!poseBusy) {
+      poseBusy = true;
+      if (poseTimeoutId) {
+        clearTimeout(poseTimeoutId);
+      }
+      poseTimeoutId = window.setTimeout(() => {
+        poseBusy = false;
+        poseTimeoutId = null;
+      }, 500); // Reduced timeout for faster recovery
+      
+      try {
+        pose.send({ image: videoElement });
+      } catch (error) {
+        console.warn('pose.send failed', error);
+        poseBusy = false;
+        if (poseTimeoutId) {
+          clearTimeout(poseTimeoutId);
+          poseTimeoutId = null;
+        }
+      }
+    }
   }
+  
+  // Draw frame immediately
+  drawVideoFrame();
+  
+  // Continue animation loop
   animationFrameId = requestAnimationFrame(startLiveProcessing);
 }
 
@@ -136,13 +162,18 @@ function drawVideoFrame() {
   if (!isRunning || !videoElement || !canvasElement || !canvasCtx) return;
 
   if (videoElement.readyState >= 2 && videoElement.videoWidth && videoElement.videoHeight) {
-    canvasElement.width = videoElement.videoWidth;
-    canvasElement.height = videoElement.videoHeight;
+    if (canvasElement.width !== videoElement.videoWidth || canvasElement.height !== videoElement.videoHeight) {
+      canvasElement.width = videoElement.videoWidth;
+      canvasElement.height = videoElement.videoHeight;
+    }
 
     canvasCtx.setTransform(1, 0, 0, 1, 0, 0);
     canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
     canvasCtx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
 
+    if (referenceLandmarks && referenceLandmarks.length) {
+      drawReferenceOverlay(referenceLandmarks);
+    }
     if (latestPoseLandmarks && latestPoseLandmarks.length) {
       drawPoseOverlay(latestPoseLandmarks);
     }
@@ -265,18 +296,59 @@ function drawGlowPoint(point, color = '#ff4d6d', radius = 5) {
   canvasCtx.fill();
 }
 
+function drawReferenceOverlay(landmarks) {
+  if (!canvasCtx || !landmarks || landmarks.length === 0) return;
+  if (typeof drawConnectors === 'function') {
+    drawConnectors(canvasCtx, landmarks, POSE_CONNECTIONS, {
+      color: 'rgba(96, 156, 255, 0.45)',
+      lineWidth: 2
+    });
+  }
+  if (typeof drawLandmarks === 'function') {
+    drawLandmarks(canvasCtx, landmarks, {
+      color: 'rgba(96, 156, 255, 0.55)',
+      lineWidth: 1,
+      radius: 2
+    });
+  }
+}
+
 function drawPoseOverlay(landmarks) {
   if (!canvasCtx || !landmarks || landmarks.length === 0) return;
-  const visible = landmarks.filter(Boolean);
+  
+  const visible = landmarks.filter(l => l && (!l.filtered || l.visibility > 0.3));
   if (!visible.length) return;
 
-  drawNerveLines(landmarks);
+  // Save canvas state for better performance
+  canvasCtx.save();
 
-  visible.forEach((landmark) => {
-    if (!landmark) return;
-    const point = toCanvasPoint(landmark);
-    drawGlowPoint(point, '#ff4d6d', 4);
-  });
+  // Draw connections (lines between keypoints)
+  if (typeof drawConnectors === 'function') {
+    drawConnectors(canvasCtx, landmarks, POSE_CONNECTIONS, {
+      color: 'rgba(124,252,0,0.9)',
+      lineWidth: 3
+    });
+  } else {
+    drawNerveLines(landmarks);
+  }
+
+  // Draw keypoints (dots)
+  if (typeof drawLandmarks === 'function') {
+    drawLandmarks(canvasCtx, landmarks, {
+      color: '#ff4d6d',
+      lineWidth: 1,
+      radius: 4
+    });
+  } else {
+    visible.forEach((landmark) => {
+      if (!landmark) return;
+      const point = toCanvasPoint(landmark);
+      drawGlowPoint(point, '#ff4d6d', 5);
+    });
+  }
+
+  // Restore canvas state
+  canvasCtx.restore();
 }
 
 function drawNerveLines(landmarks) {
@@ -705,13 +777,27 @@ function drawLabelSet(landmarks) {
 }
 
 function onResults(results) {
-  if (!results.image || !canvasElement || !canvasCtx) return;
+  if (!results.image || !canvasElement || !canvasCtx) {
+    poseBusy = false;
+    if (poseTimeoutId) {
+      clearTimeout(poseTimeoutId);
+      poseTimeoutId = null;
+    }
+    return;
+  }
 
-  latestPoseLandmarks = results.poseLandmarks || null;
+  // Apply enhanced tracking with smoothing and optimization
+  let processedLandmarks = results.poseLandmarks || null;
+  
+  if (processedLandmarks && typeof applyPoseTrackingEnhancements === 'function') {
+    processedLandmarks = applyPoseTrackingEnhancements(processedLandmarks);
+  }
 
-  if (results.poseLandmarks) {
-    const landmarks = results.poseLandmarks;
-    updateStatus('Audience terdeteksi. Titik dan garis saraf mengikuti gerakan.');
+  latestPoseLandmarks = processedLandmarks;
+
+  if (processedLandmarks) {
+    const landmarks = processedLandmarks;
+    updateStatus('🎯 Audience terdeteksi. Titik dan garis saraf mengikuti gerakan real-time.');
 
     if (referenceLandmarks) {
       const percent = computePoseSimilarity(referenceLandmarks, landmarks);
@@ -730,9 +816,14 @@ function onResults(results) {
     }
   } else {
     latestPoseLandmarks = null;
-    updateStatus('Tidak ada audience yang terdeteksi. Silakan masuk ke frame kamera.');
+    updateStatus('⏳ Tidak ada audience yang terdeteksi. Silakan masuk ke frame kamera.');
   }
+
   poseBusy = false;
+  if (poseTimeoutId) {
+    clearTimeout(poseTimeoutId);
+    poseTimeoutId = null;
+  }
 }
 
 let pose = null;
@@ -744,8 +835,8 @@ if (typeof Pose !== 'undefined') {
   pose.setOptions({
     modelComplexity: 1,
     smoothLandmarks: true,
-    minDetectionConfidence: 0.6,
-    minTrackingConfidence: 0.6,
+    minDetectionConfidence: 0.5,  // Lower for better real-time tracking
+    minTrackingConfidence: 0.5,   // Lower for responsive tracking
     selfieMode: false
   });
   pose.onResults(onResults);

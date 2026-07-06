@@ -498,10 +498,6 @@ function hideCameraReferencePreview() {
 }
 
 function tryAutoLoadReferenceForCamera() {
-  if (!therapyAction || !jointMovement) return;
-  if (!therapyAction.value || !jointMovement.value) {
-    return;
-  }
   try {
     const saved = JSON.parse(localStorage.getItem('savedPoseRefs') || '[]');
     const first = saved.find((item) => item && item.image);
@@ -509,20 +505,29 @@ function tryAutoLoadReferenceForCamera() {
       loadReferenceFromDataUrl(first.image, first.name || 'referensi otomatis');
       showCameraReferencePreview(first.image);
       if (cameraAccuracyResult) {
-        cameraAccuracyResult.textContent = 'Referensi dimuat. Menunggu deteksi...';
+        cameraAccuracyResult.textContent = '✅ Referensi dimuat. Deteksi aktif...';
         cameraAccuracyResult.style.color = '#d1d5db';
       }
       updateAccuracyDisplay(0);
+      updateStatus('📊 Accuracy detection aktif. Bandingkan pose dengan referensi.', false);
+      return true;
     } else {
       showCameraReferencePreview('');
       if (cameraAccuracyResult) {
-        cameraAccuracyResult.textContent = 'Tidak ada referensi tersimpan. Unggah di admin.';
-        cameraAccuracyResult.style.color = '#f0f0f0';
+        cameraAccuracyResult.textContent = '⚠️ Tidak ada referensi. Upload foto di Admin Panel.';
+        cameraAccuracyResult.style.color = '#ffaa00';
       }
       updateAccuracyDisplay(0);
+      updateStatus('⚠️ Tidak ada referensi tersimpan untuk deteksi akurasi.', false);
+      return false;
     }
   } catch (error) {
     console.warn('tryAutoLoadReferenceForCamera failed', error);
+    if (cameraAccuracyResult) {
+      cameraAccuracyResult.textContent = '❌ Error loading reference';
+      cameraAccuracyResult.style.color = '#ff6b6b';
+    }
+    return false;
   }
 }
 
@@ -816,7 +821,12 @@ function onResults(results) {
     }
   } else {
     latestPoseLandmarks = null;
-    updateStatus('⏳ Tidak ada audience yang terdeteksi. Silakan masuk ke frame kamera.');
+    // Only show waiting message if reference is loaded
+    if (referenceLandmarks) {
+      updateStatus('⏳ Menunggu deteksi pose... Masuk ke frame kamera.');
+    } else {
+      updateStatus('⚠️ Tidak ada referensi. Upload foto di Admin Panel untuk memulai deteksi.');
+    }
   }
 
   poseBusy = false;
@@ -1070,6 +1080,18 @@ async function startCamera() {
     setButtons();
     updateStatus('Kamera aktif. Live tracking berjalan...');
 
+    // Auto-load reference for accuracy detection
+    const referenceLoaded = tryAutoLoadReferenceForCamera();
+    if (!referenceLoaded) {
+      // Fallback: load first reference if available
+      autoLoadFirstReference();
+    }
+
+    // Start accuracy detection monitoring
+    if (typeof startAccuracyDetection === 'function') {
+      startAccuracyDetection();
+    }
+
     startLiveProcessing();
   } catch (error) {
     console.error('camera start error', error);
@@ -1162,6 +1184,12 @@ function stopCamera() {
       videoElement.srcObject = null;
     }
   }
+  
+  // Stop accuracy detection monitoring
+  if (typeof stopAccuracyDetection === 'function') {
+    stopAccuracyDetection();
+  }
+  
   if (sessionAccuracy && sessionAccuracy.textContent !== '--') {
     savePatientSessionHistory();
   }

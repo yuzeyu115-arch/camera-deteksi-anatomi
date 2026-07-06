@@ -170,32 +170,19 @@
     }
     @media (max-width: 768px) {
       .video-card {
-        aspect-ratio: 4 / 3;
-        min-height: 240px;
-        border-radius: 12px;
-      }
-    }
-    @media (max-width: 480px) {
-      .video-card {
         aspect-ratio: unset;
         min-height: 0;
-        height: 100vh;
-        max-height: 100vh;
+        height: 90vh;
+        max-height: 90vh;
         border-radius: 0;
         margin: 0;
         padding: 0;
         box-shadow: none;
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        width: 100vw;
-        z-index: 50;
-        overflow: hidden;
+        position: relative;
+        width: 100%;
       }
       .main-content > .section-card:nth-child(2) {
-        margin-top: 100vh;
+        margin-top: 90vh;
       }
       .camera-reference-panel {
         width: calc(100% - 32px);
@@ -211,6 +198,56 @@
         right: 16px;
         font-size: 13px;
         padding: 12px 14px;
+      }
+    }
+    @media (max-width: 480px) {
+      .video-card {
+        aspect-ratio: unset;
+        min-height: 0;
+        height: 100vh;
+        max-height: 100vh;
+        border-radius: 0;
+        margin: 0;
+        padding: 0;
+        box-shadow: none;
+        position: relative;
+        width: 100%;
+        z-index: 1;
+        overflow: hidden;
+      }
+      .main-content {
+        padding-top: 0;
+      }
+      .main-content > .section-card:nth-child(2) {
+        margin-top: 0;
+      }
+      .camera-reference-panel {
+        width: calc(100% - 32px);
+        left: 16px;
+        right: 16px;
+      }
+      .camera-accuracy-panel {
+        gap: 8px;
+      }
+      .overlay {
+        bottom: 18px;
+        left: 16px;
+        right: 16px;
+        font-size: 13px;
+        padding: 12px 14px;
+      }
+      .video-card video,
+      .video-card canvas {
+        object-fit: cover;
+      }
+      .camera-actions {
+        flex-direction: column;
+      }
+      .camera-actions button {
+        width: 100%;
+      }
+      .reference-hint {
+        font-size: 12px;
       }
     }
     video {
@@ -561,6 +598,39 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    .history-card {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 14px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .history-title {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #e2e8f0;
+    }
+    .history-detail {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      font-size: 12px;
+      color: #cbd5e1;
+    }
+    .history-note {
+      font-size: 12px;
+      color: #f8fafc;
+      background: rgba(255, 255, 255, 0.04);
+      border-radius: 10px;
+      padding: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
     @media (max-width: 1200px) {
       .container {
         flex-direction: column;
@@ -710,34 +780,109 @@
     
     /* Mobile specific adjustments */
     @media (max-width: 480px) {
-      .main-content {
-        gap: 12px;
-      }
-      .control-column {
-        gap: 10px;
-      }
-      .patient-info {
-        gap: 6px;
-      }
-      .distance-metrics {
-        gap: 6px;
-      }
-      .accuracy-display {
-        gap: 10px;
-      }
-      .topbar {
+      .container {
         flex-direction: column;
-        align-items: flex-start;
-      }
-      .tab-switch {
-        width: 100%;
-      }
-      .container,
-      .section-card {
-        width: 100%;
+        padding: 10px 12px 12px;
+        gap: 12px;
       }
       .sidebar {
         width: 100%;
+        max-height: none;
+        overflow: visible;
+        padding: 0;
+      }
+      .main-content {
+        width: 100%;
+        gap: 12px;
+        padding-bottom: 12px;
+      }
+      .page-heading {
+        font-size: 20px;
+      }
+      .page-subtitle {
+        font-size: 12px;
+      }
+      .topbar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+      }
+      .tab-switch {
+        width: 100%;
+        display: flex;
+        flex-wrap: wrap;
+      }
+      .tab-btn {
+        flex: 1;
+        width: 100%;
+        min-width: unset;
+      }
+      .video-card {
+        aspect-ratio: unset;
+        min-height: 0;
+        height: 58vh;
+        max-height: 58vh;
+        border-radius: 18px;
+        margin: 0;
+        padding: 0;
+        box-shadow: 0 18px 42px rgba(0, 0, 0, 0.35);
+        position: relative;
+        width: 100%;
+        overflow: hidden;
+      }
+      .camera-reference-panel {
+        width: calc(100% - 28px);
+        left: 14px;
+        right: 14px;
+      }
+      .camera-accuracy-panel {
+        gap: 8px;
+      }
+      .camera-ref-image {
+        height: 100px;
+      }
+      .overlay {
+        bottom: 14px;
+        left: 14px;
+        right: 14px;
+        font-size: 13px;
+        padding: 12px 14px;
+      }
+      .camera-actions {
+        flex-direction: column;
+        gap: 10px;
+      }
+      .camera-actions button {
+        width: 100%;
+      }
+      .reference-hint {
+        font-size: 12px;
+      }
+      .section-card {
+        padding: 14px;
+        border-radius: 16px;
+      }
+      .patient-info,
+      .distance-metrics,
+      .gallery-grid,
+      .history-detail {
+        gap: 8px;
+      }
+      .gallery-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .gallery-item img {
+        height: 100px;
+      }
+      .history-detail {
+        grid-template-columns: 1fr;
+      }
+      .metric-item,
+      .select-field,
+      .upload-box,
+      .gallery-item,
+      .history-card {
+        font-size: 12px;
       }
     }
   </style>
@@ -848,6 +993,28 @@
               </div>
             </div>
           </div>
+
+          <div class="section-card">
+            <div class="section-title">📋 Hasil Sesi Pasien</div>
+            <div class="distance-metrics">
+              <div class="metric-item">
+                <span class="metric-label">Status Sesi</span>
+                <span class="metric-value" id="sessionStatus">Menunggu</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Akurasi Akhir</span>
+                <span class="metric-value" id="sessionAccuracy">--</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Rekomendasi Terapis</span>
+                <span class="metric-value" id="sessionRecommendation">Tunggu hasil deteksi.</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Aksi Terapi</span>
+                <span class="metric-value" id="sessionAction">-</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -872,6 +1039,10 @@
         <div class="divider"></div>
         <div class="section-title">🖼️ Galeri Foto Tersimpan</div>
         <div id="adminGallery" class="gallery-grid"></div>
+        <div class="divider"></div>
+        <div class="section-title">📜 Riwayat Sesi Pasien</div>
+        <div id="sessionHistoryList"></div>
+        <button id="clearHistoryBtn" class="button-danger" type="button">Hapus Riwayat</button>
       </div>
     </div>
   </div>

@@ -33,10 +33,20 @@ const stopBtnSecondary = document.getElementById('stopBtnSecondary');
 const summaryTherapy = document.getElementById('summaryTherapy');
 const summaryResult = document.getElementById('summaryResult');
 const summaryJoint = document.getElementById('summaryJoint');
+const sessionStatus = document.getElementById('sessionStatus');
+const sessionAccuracy = document.getElementById('sessionAccuracy');
+const sessionRecommendation = document.getElementById('sessionRecommendation');
+const sessionAction = document.getElementById('sessionAction');
 const therapyAction = document.getElementById('therapyAction');
 const therapyResult = document.getElementById('therapyResult');
 const jointMovement = document.getElementById('jointMovement');
+const patientName = document.getElementById('patientName');
+const patientAge = document.getElementById('patientAge');
+const therapySession = document.getElementById('therapySession');
+const sessionDate = document.getElementById('sessionDate');
 const cameraReferencePanel = document.getElementById('cameraReferencePanel');
+const sessionHistoryList = document.getElementById('sessionHistoryList');
+const clearHistoryBtn = document.getElementById('clearHistoryBtn');
 const cameraRefImage = document.getElementById('cameraRefImage');
 const cameraAccuracyValue = document.getElementById('cameraAccuracyValue');
 const cameraAccuracyResult = document.getElementById('cameraAccuracyResult');
@@ -50,6 +60,7 @@ let references = [];
 let selectedRefIndex = -1;
 let similarityThreshold = 70;
 let mirrorCanvas = false;
+let latestPoseLandmarks = null;
 
 function updateStatus(message, isError = false) {
   statusElement.textContent = message;
@@ -61,6 +72,34 @@ function syncPatientSummary() {
   if (summaryTherapy) summaryTherapy.textContent = therapyAction?.value || '-';
   if (summaryResult) summaryResult.textContent = therapyResult?.value || '-';
   if (summaryJoint) summaryJoint.textContent = jointMovement?.value || '-';
+  updateSessionResult(null);
+}
+
+function updateSessionResult(percent) {
+  const value = Number.isFinite(percent) ? percent : null;
+  let status = 'Menunggu';
+  let recommendation = 'Tunggu hasil deteksi.';
+  let accuracyText = '--';
+
+  if (value !== null) {
+    const safePercent = Math.min(100, Math.max(0, value));
+    accuracyText = `${safePercent.toFixed(1)}%`;
+    if (safePercent >= similarityThreshold) {
+      status = 'Bagus';
+      recommendation = 'Lanjutkan sesi dan catat hasil terapi.';
+    } else if (safePercent >= similarityThreshold * 0.8) {
+      status = 'Cukup';
+      recommendation = 'Ulangi gerakan dengan fokus pada sendi yang dipantau.';
+    } else {
+      status = 'Perlu Perbaikan';
+      recommendation = 'Ulangi sesi dengan referensi tambahan atau koreksi postur.';
+    }
+  }
+
+  if (sessionStatus) sessionStatus.textContent = status;
+  if (sessionAccuracy) sessionAccuracy.textContent = accuracyText;
+  if (sessionRecommendation) sessionRecommendation.textContent = recommendation;
+  if (sessionAction) sessionAction.textContent = therapyAction?.value || '-';
 }
 
 function setButtons() {
@@ -81,13 +120,16 @@ async function getCameraPermissionState() {
   }
 }
 
+let poseBusy = false;
+
 function startLiveProcessing() {
   if (!isRunning) return;
-  if (pose && typeof pose.send === 'function') {
+  drawVideoFrame();
+  if (pose && typeof pose.send === 'function' && !poseBusy) {
+    poseBusy = true;
     pose.send({ image: videoElement });
-  } else {
-    drawVideoFrame();
   }
+  animationFrameId = requestAnimationFrame(startLiveProcessing);
 }
 
 function drawVideoFrame() {
@@ -97,17 +139,14 @@ function drawVideoFrame() {
     canvasElement.width = videoElement.videoWidth;
     canvasElement.height = videoElement.videoHeight;
 
-    if (mirrorCanvas) {
-      canvasCtx.setTransform(-1, 0, 0, 1, canvasElement.width, 0);
-    } else {
-      canvasCtx.setTransform(1, 0, 0, 1, 0, 0);
-    }
-
+    canvasCtx.setTransform(1, 0, 0, 1, 0, 0);
     canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
     canvasCtx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
-  }
 
-  animationFrameId = requestAnimationFrame(drawVideoFrame);
+    if (latestPoseLandmarks && latestPoseLandmarks.length) {
+      drawPoseOverlay(latestPoseLandmarks);
+    }
+  }
 }
 
 function prepareVideoElement() {
@@ -117,6 +156,8 @@ function prepareVideoElement() {
   videoElement.setAttribute('muted', 'true');
   videoElement.playsInline = true;
   videoElement.muted = true;
+  videoElement.style.transform = 'scaleX(1)';
+  if (canvasElement) canvasElement.style.transform = 'scaleX(1)';
 }
 
 async function getCameraStream() {
@@ -124,26 +165,33 @@ async function getCameraStream() {
     throw new Error('Browser tidak mendukung akses kamera.');
   }
 
+  const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth <= 768;
+  const targetWidth = isMobile ? { ideal: 720 } : { ideal: 1280 };
+  const targetHeight = isMobile ? { ideal: 1280 } : { ideal: 720 };
+
   const constraintSets = [
     {
       video: {
         facingMode: { ideal: 'user' },
-        width: { ideal: 1280 },
-        height: { ideal: 720 }
+        width: targetWidth,
+        height: targetHeight,
+        frameRate: { ideal: 24, max: 30 }
       }
     },
     {
       video: {
         facingMode: 'user',
         width: { ideal: 640 },
-        height: { ideal: 480 }
+        height: { ideal: 480 },
+        frameRate: { ideal: 24, max: 30 }
       }
     },
     {
       video: {
         facingMode: { ideal: 'environment' },
-        width: { ideal: 1280 },
-        height: { ideal: 720 }
+        width: targetWidth,
+        height: targetHeight,
+        frameRate: { ideal: 24, max: 30 }
       }
     },
     { video: true }
@@ -217,7 +265,7 @@ function drawGlowPoint(point, color = '#ff4d6d', radius = 5) {
   canvasCtx.fill();
 }
 
-function drawFallbackPoseOverlay(landmarks) {
+function drawPoseOverlay(landmarks) {
   if (!canvasCtx || !landmarks || landmarks.length === 0) return;
   const visible = landmarks.filter(Boolean);
   if (!visible.length) return;
@@ -269,16 +317,6 @@ function onReferenceResults(results) {
       drawConnectors(refCtx, results.poseLandmarks, POSE_CONNECTIONS, { color: 'rgba(124,252,0,0.9)', lineWidth: 2 });
       drawLandmarks(refCtx, results.poseLandmarks, { color: '#fff', lineWidth: 1, radius: 2 });
     }
-    try {
-      const dataUrl = refCanvasEl.toDataURL('image/jpeg', 0.8);
-      // store dataURL into current references entry if exists
-      if (selectedRefIndex >= 0 && references[selectedRefIndex]) {
-        references[selectedRefIndex].dataURL = dataUrl;
-        references[selectedRefIndex].name = references[selectedRefIndex].file ? references[selectedRefIndex].file.name : `ref-${Date.now()}`;
-      }
-    } catch (e) {
-      console.warn('Tidak dapat mengambil dataURL preview', e);
-    }
   }
   updateStatus('Foto referensi tersimpan. Kini sistem dapat membandingkan posisi.', false);
 }
@@ -306,6 +344,7 @@ function loadReferenceFromDataUrl(dataUrl, fallbackName = '') {
   const img = new Image();
   img.onload = () => {
     referenceImage = img;
+    showCameraReferencePreview(dataUrl);
     if (poseRef && typeof poseRef.send === 'function') {
       poseRef.send({ image: img });
     } else {
@@ -317,6 +356,51 @@ function loadReferenceFromDataUrl(dataUrl, fallbackName = '') {
   if (fallbackName) {
     updateStatus(`Referensi ${fallbackName} dipakai untuk pencocokan otomatis.`, false);
   }
+}
+
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => resolve(ev.target.result);
+    reader.onerror = () => reject(new Error('Gagal membaca file gambar'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function waitAnimationFrame() {
+  return new Promise((resolve) => requestAnimationFrame(resolve));
+}
+
+function compressImageFile(file, maxDimension = 800) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const ratio = Math.min(1, maxDimension / Math.max(img.width, img.height));
+      const width = Math.round(img.width * ratio);
+      const height = Math.round(img.height * ratio);
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Canvas context tidak tersedia'));
+        return;
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          reject(new Error('Gagal mengompres gambar'));
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = (ev) => resolve(ev.target.result);
+        reader.onerror = () => reject(new Error('Gagal membaca hasil kompresi'));
+        reader.readAsDataURL(blob);
+      }, 'image/jpeg', 0.75);
+    };
+    img.onerror = () => reject(new Error('Gagal memuat file gambar'));
+    img.src = URL.createObjectURL(file);
+  });
 }
 
 function autoLoadFirstReference() {
@@ -432,10 +516,6 @@ function renderSavedRefs() {
           refCtx.drawImage(im, 0, 0, refCanvasEl.width, refCanvasEl.height);
         }
         updateStatus('Referensi dimuat dari galeri tersimpan.', false);
-        if (referenceLandmarks) {
-          const percent = computePoseSimilarity(referenceLandmarks, results.poseLandmarks || []);
-          updateAccuracyDisplay(percent);
-        }
       };
       im.src = item.image;
     };
@@ -589,6 +669,7 @@ function updateAccuracyDisplay(percent) {
   if (window.EnhancedUI && window.EnhancedUI.updateAccuracyDisplay) {
     window.EnhancedUI.updateAccuracyDisplay(safePercent);
   }
+  updateSessionResult(safePercent);
 }
 
 function drawLabel(point, title, subtitle) {
@@ -626,24 +707,10 @@ function drawLabelSet(landmarks) {
 function onResults(results) {
   if (!results.image || !canvasElement || !canvasCtx) return;
 
-  canvasElement.width = results.image.width;
-  canvasElement.height = results.image.height;
-  // apply transform first so image and annotations share same orientation
-  canvasCtx.save();
-  if (mirrorCanvas) {
-    canvasCtx.setTransform(-1, 0, 0, 1, canvasElement.width, 0);
-  } else {
-    canvasCtx.setTransform(1, 0, 0, 1, 0, 0);
-  }
-  canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-  canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+  latestPoseLandmarks = results.poseLandmarks || null;
 
   if (results.poseLandmarks) {
     const landmarks = results.poseLandmarks;
-    if (typeof drawConnectors === 'function') {
-      drawConnectors(canvasCtx, landmarks, POSE_CONNECTIONS, { color: 'rgba(255,255,255,0.25)', lineWidth: 2 });
-    }
-    drawFallbackPoseOverlay(landmarks);
     updateStatus('Audience terdeteksi. Titik dan garis saraf mengikuti gerakan.');
 
     if (referenceLandmarks) {
@@ -661,12 +728,11 @@ function onResults(results) {
         );
       }
     }
-    canvasCtx.restore();
   } else {
-    canvasCtx.restore();
+    latestPoseLandmarks = null;
     updateStatus('Tidak ada audience yang terdeteksi. Silakan masuk ke frame kamera.');
   }
-  animationFrameId = requestAnimationFrame(startLiveProcessing);
+  poseBusy = false;
 }
 
 let pose = null;
@@ -679,7 +745,8 @@ if (typeof Pose !== 'undefined') {
     modelComplexity: 1,
     smoothLandmarks: true,
     minDetectionConfidence: 0.6,
-    minTrackingConfidence: 0.6
+    minTrackingConfidence: 0.6,
+    selfieMode: false
   });
   pose.onResults(onResults);
 } else {
@@ -689,7 +756,12 @@ if (typeof Pose !== 'undefined') {
 // Create a separate Pose instance for processing reference images
 if (typeof Pose !== 'undefined') {
   poseRef = new Pose({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
-  poseRef.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.6 });
+  poseRef.setOptions({
+    modelComplexity: 1,
+    smoothLandmarks: true,
+    minDetectionConfidence: 0.6,
+    selfieMode: false
+  });
   poseRef.onResults(onReferenceResults);
 }
 
@@ -810,42 +882,62 @@ try {
 // initialize UI state
 syncThreshold(similarityThreshold);
 syncPatientSummary();
-// load mirror preference from localStorage
-try {
-  const savedMirror = localStorage.getItem('mirrorPref');
-  if (savedMirror !== null) {
-    mirrorCanvas = savedMirror === 'true';
-  }
-} catch (e) { console.warn('localStorage mirror read failed', e); }
+renderSessionHistory();
+// disable mirror preference: kamera selalu tampil natural
+mirrorCanvas = false;
 
 if (adminRefUpload) {
-  adminRefUpload.addEventListener('change', (e) => {
+  adminRefUpload.addEventListener('change', async (e) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
-    const images = Array.from(files).slice(0, 20);
+    const images = Array.from(files).filter((file) => file.type.startsWith('image/')).slice(0, 20);
+    if (!images.length) {
+      updateStatus('Tidak ada file gambar valid yang dipilih.', true);
+      return;
+    }
+
     const saved = JSON.parse(localStorage.getItem('savedPoseRefs') || '[]');
-    images.forEach((file, index) => {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        saved.push({ name: file.name || `admin-ref-${index + 1}`, image: ev.target.result, landmarks: null });
-        if (saved.length === images.length) {
-          localStorage.setItem('savedPoseRefs', JSON.stringify(saved));
-          renderSavedRefs();
-          renderAdminGallery();
-          autoLoadFirstReference();
-          updateStatus('Foto admin tersimpan ke galeri referensi.', false);
-        }
-      };
-      reader.readAsDataURL(file);
-    });
+    const newItems = [];
+    updateStatus('Memproses foto referensi admin, kamera tetap berjalan...');
+
+    for (const file of images) {
+      try {
+        const dataUrl = file.size > 500000 ? await compressImageFile(file, 700) : await readFileAsDataURL(file);
+        newItems.push({ name: file.name || `admin-ref-${saved.length + newItems.length + 1}`, image: dataUrl, landmarks: null });
+      } catch (error) {
+        console.warn('Gagal memproses file referensi admin:', file.name, error);
+      }
+      await waitAnimationFrame();
+    }
+
+    if (!newItems.length) {
+      updateStatus('Gagal memproses semua foto referensi. Coba unggah kembali satu per satu.', true);
+      return;
+    }
+
+    const merged = saved.concat(newItems);
+    try {
+      localStorage.setItem('savedPoseRefs', JSON.stringify(merged));
+    } catch (error) {
+      console.error('Gagal menyimpan referensi admin ke localStorage', error);
+      updateStatus('Penyimpanan referensi gagal. Coba dengan jumlah file lebih sedikit.', true);
+      return;
+    }
+
+    renderSavedRefs();
+    renderAdminGallery();
+    autoLoadFirstReference();
+    if (therapyAction?.value && jointMovement?.value) {
+      tryAutoLoadReferenceForCamera();
+    }
+    updateStatus(`Foto admin tersimpan ke galeri referensi (${newItems.length} file).`, false);
   });
 }
 
 async function startCamera() {
   const permState = await getCameraPermissionState();
   if (permState === 'denied') {
-    updateStatus('Akses kamera diblokir. Buka ikon gembok di address bar dan izinkan kamera untuk origin ini.', true);
-    return;
+    updateStatus('Izin kamera saat ini ditolak. Silakan cek ikon gembok browser dan coba lagi.', true);
   }
 
   if (isRunning) {
@@ -859,6 +951,7 @@ async function startCamera() {
     return;
   }
 
+  updateStatus('Memulai kamera...');
   prepareVideoElement();
 
   try {
@@ -897,6 +990,68 @@ async function startCamera() {
   }
 }
 
+function savePatientSessionHistory() {
+  try {
+    const history = JSON.parse(localStorage.getItem('patientSessionHistory') || '[]');
+    const record = {
+      id: Date.now(),
+      timestamp: new Date().toLocaleString('id-ID', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }),
+      patientName: patientName?.value || 'Tanpa nama',
+      age: patientAge?.value || '-',
+      sessionLabel: therapySession?.value || '-',
+      sessionDate: sessionDate?.value || new Date().toISOString().slice(0, 10),
+      therapyAction: therapyAction?.value || '-',
+      jointMovement: jointMovement?.value || '-',
+      therapyResult: therapyResult?.value || '-',
+      status: sessionStatus?.textContent || 'Menunggu',
+      accuracy: sessionAccuracy?.textContent || '--',
+      recommendation: sessionRecommendation?.textContent || ''
+    };
+    history.unshift(record);
+    if (history.length > 20) history.length = 20;
+    localStorage.setItem('patientSessionHistory', JSON.stringify(history));
+    renderSessionHistory();
+  } catch (error) {
+    console.warn('savePatientSessionHistory failed', error);
+  }
+}
+
+function renderSessionHistory() {
+  if (!sessionHistoryList) return;
+  const history = JSON.parse(localStorage.getItem('patientSessionHistory') || '[]');
+  sessionHistoryList.innerHTML = '';
+  if (!history.length) {
+    sessionHistoryList.innerHTML = '<div class="admin-hint">Belum ada riwayat pasien. Hentikan sesi setelah monitoring untuk menyimpannya.</div>';
+    return;
+  }
+  history.forEach((record) => {
+    const card = document.createElement('div');
+    card.className = 'history-card';
+    card.innerHTML = `
+      <div class="history-title">
+        <span>${record.patientName} — ${record.sessionLabel}</span>
+        <span>${record.timestamp}</span>
+      </div>
+      <div class="history-detail">
+        <div><strong>Usia:</strong> ${record.age}</div>
+        <div><strong>Hasil:</strong> ${record.therapyResult}</div>
+        <div><strong>Aksi:</strong> ${record.therapyAction}</div>
+        <div><strong>Sendi:</strong> ${record.jointMovement}</div>
+        <div><strong>Status:</strong> ${record.status}</div>
+        <div><strong>Akurasi:</strong> ${record.accuracy}</div>
+      </div>
+      <div class="history-note">${record.recommendation || '-'}</div>
+    `;
+    sessionHistoryList.appendChild(card);
+  });
+}
+
+function clearSessionHistory() {
+  localStorage.removeItem('patientSessionHistory');
+  renderSessionHistory();
+  updateStatus('Riwayat pasien dihapus.', false);
+}
+
 function stopCamera() {
   if (animationFrameId) {
     cancelAnimationFrame(animationFrameId);
@@ -915,6 +1070,9 @@ function stopCamera() {
     if (videoElement.srcObject) {
       videoElement.srcObject = null;
     }
+  }
+  if (sessionAccuracy && sessionAccuracy.textContent !== '--') {
+    savePatientSessionHistory();
   }
   isRunning = false;
   setButtons();
@@ -953,6 +1111,7 @@ if (stopBtnSecondary) {
 
 if (startBtn) startBtn.addEventListener('click', startCamera);
 if (stopBtn) stopBtn.addEventListener('click', stopCamera);
+if (clearHistoryBtn) clearHistoryBtn.addEventListener('click', clearSessionHistory);
 setButtons();
 
 // setRefBtn handled earlier (loads selected thumbnail)

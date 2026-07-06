@@ -132,7 +132,7 @@
         padding: 10px;
       }
       /* Make video feed section card full screen */
-      .main-content > div:nth-child(3) {
+      .main-content > div:nth-child(1) {
         padding: 0;
         margin: -10px -10px 0 -10px;
         background: transparent;
@@ -140,7 +140,7 @@
         box-shadow: none;
       }
       /* Hide section title for video on mobile */
-      .main-content > div:nth-child(3) > .section-title {
+      .main-content > div:nth-child(1) > .section-title {
         display: none;
       }
     }
@@ -192,9 +192,25 @@
         bottom: 0;
         width: 100vw;
         z-index: 50;
+        overflow: hidden;
       }
-      .video-card ~ .section-card {
+      .main-content > .section-card:nth-child(2) {
         margin-top: 100vh;
+      }
+      .camera-reference-panel {
+        width: calc(100% - 32px);
+        left: 16px;
+        right: 16px;
+      }
+      .camera-accuracy-panel {
+        gap: 8px;
+      }
+      .overlay {
+        bottom: 18px;
+        left: 16px;
+        right: 16px;
+        font-size: 13px;
+        padding: 12px 14px;
       }
     }
     video {

@@ -58,8 +58,12 @@ class AccuracyDetectionManager {
    * Check if reference landmarks are loaded
    */
   checkReferenceStatus() {
-    // Check if referenceLandmarks exists (from camera_tracking.js)
-    const hasRef = typeof referenceLandmarks !== 'undefined' && referenceLandmarks && referenceLandmarks.length > 0;
+    // BUG FIX: Check if globals are defined (might not be if scripts load out of order)
+    if (typeof referenceLandmarks === 'undefined' || typeof latestPoseLandmarks === 'undefined') {
+      return;
+    }
+    
+    const hasRef = referenceLandmarks && Array.isArray(referenceLandmarks) && referenceLandmarks.length > 0;
     
     if (hasRef !== this.hasReference) {
       this.hasReference = hasRef;
@@ -81,20 +85,35 @@ class AccuracyDetectionManager {
    * Force update accuracy display
    */
   updateAccuracyDisplay() {
-    // Only update if we have reference and latest pose landmarks
-    if (typeof referenceLandmarks !== 'undefined' && referenceLandmarks &&
-        typeof latestPoseLandmarks !== 'undefined' && latestPoseLandmarks) {
-      
-      // Call compute similarity if available
-      if (typeof computePoseSimilarity === 'function') {
-        const accuracy = computePoseSimilarity(referenceLandmarks, latestPoseLandmarks);
-        this.lastAccuracy = accuracy;
-        
-        // Update UI if function exists
-        if (typeof updateAccuracyDisplay === 'function') {
-          updateAccuracyDisplay(accuracy);
-        }
+    // BUG FIX: Add multiple safety checks before accessing globals
+    try {
+      if (typeof referenceLandmarks === 'undefined' || typeof latestPoseLandmarks === 'undefined' || 
+          typeof computePoseSimilarity === 'undefined' || typeof updateAccuracyDisplay === 'undefined') {
+        return;
       }
+      
+      if (!referenceLandmarks || !Array.isArray(referenceLandmarks) || referenceLandmarks.length === 0) {
+        return;
+      }
+      
+      if (!latestPoseLandmarks || !Array.isArray(latestPoseLandmarks) || latestPoseLandmarks.length === 0) {
+        return;
+      }
+      
+      // Call compute similarity
+      const accuracy = computePoseSimilarity(referenceLandmarks, latestPoseLandmarks);
+      
+      if (!Number.isFinite(accuracy)) {
+        return;
+      }
+      
+      this.lastAccuracy = accuracy;
+      
+      // Update UI
+      updateAccuracyDisplay(accuracy);
+    } catch (error) {
+      // Silently catch errors - don't break monitoring on exception
+      console.warn('AccuracyDetectionManager: Error updating accuracy display', error);
     }
   }
 

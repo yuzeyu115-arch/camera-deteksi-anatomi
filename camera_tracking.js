@@ -419,15 +419,18 @@ function loadReferenceFromDataUrl(dataUrl, fallbackName = '') {
     showCameraReferencePreview(dataUrl);
     if (poseRef && typeof poseRef.send === 'function') {
       poseRef.send({ image: img });
+      // BUG FIX: Only show success message after poseRef.send() is called
+      if (fallbackName) {
+        updateStatus(`✅ Referensi ${fallbackName} dimuat untuk pencocokan otomatis.`, false);
+      }
     } else {
-      updateStatus('Pose reference tidak tersedia.', true);
+      updateStatus('❌ Pose reference tidak tersedia. Coba refresh halaman.', true);
     }
   };
-  img.onerror = () => updateStatus('Gagal memuat foto referensi.', true);
+  img.onerror = () => {
+    updateStatus(`❌ Gagal memuat foto referensi: ${fallbackName}. File mungkin rusak.`, true);
+  };
   img.src = dataUrl;
-  if (fallbackName) {
-    updateStatus(`Referensi ${fallbackName} dipakai untuk pencocokan otomatis.`, false);
-  }
 }
 
 function readFileAsDataURL(file) {
@@ -584,7 +587,19 @@ function renderSavedRefs() {
       const im = new Image();
       im.onload = () => {
         referenceImage = im;
-        referenceLandmarks = item.landmarks;
+        // BUG FIX: Validate landmarks exist before using
+        if (item.landmarks && Array.isArray(item.landmarks) && item.landmarks.length > 0) {
+          referenceLandmarks = item.landmarks;
+          updateStatus('✅ Referensi dimuat dari galeri tersimpan (pre-computed).', false);
+        } else {
+          // If landmarks are missing, need to recompute them
+          if (poseRef && typeof poseRef.send === 'function') {
+            poseRef.send({ image: im });
+            updateStatus('📊 Referensi dimuat. Computing landmarks..', false);
+          } else {
+            updateStatus('⚠️ Tidak bisa recompute landmarks. Pose reference tidak tersedia.', true);
+          }
+        }
         if (refCanvasEl && refCtx) {
           refCanvasEl.width = im.width;
           refCanvasEl.height = im.height * (refCanvasEl.width / im.width);
@@ -592,7 +607,9 @@ function renderSavedRefs() {
           refCtx.clearRect(0, 0, refCanvasEl.width, refCanvasEl.height);
           refCtx.drawImage(im, 0, 0, refCanvasEl.width, refCanvasEl.height);
         }
-        updateStatus('Referensi dimuat dari galeri tersimpan.', false);
+      };
+      im.onerror = () => {
+        updateStatus('❌ Gagal memuat referensi dari galeri.', true);
       };
       im.src = item.image;
     };
@@ -664,6 +681,12 @@ function computePoseSimilarity(ref, live) {
     const fallbackRight = landmarks[24];
     const a = left || fallbackLeft;
     const b = right || fallbackRight;
+    
+    // BUG FIX: Handle case where both a and b are null/undefined
+    if (!a || !b) {
+      return { cx: 0.5, cy: 0.5, scale: 1 };
+    }
+    
     const cx = (a.x + b.x) / 2;
     const cy = (a.y + b.y) / 2;
     const scale = Math.hypot(a.x - b.x, a.y - b.y) || 1e-6;

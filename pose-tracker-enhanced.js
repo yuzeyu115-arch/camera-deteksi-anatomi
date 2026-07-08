@@ -7,9 +7,9 @@ class EnhancedPoseTracker {
   constructor() {
     this.smoothedLandmarks = null;
     this.previousLandmarks = null;
-    this.smoothingFactor = 0.7; // EMA smoothing (0.7 = 70% previous, 30% current)
+    this.smoothingFactor = 0.25; // EMA smoothing (0.25 = 25% previous, 75% current) - VERY LOW for real-time
     this.adaptiveSmoothing = true;
-    this.motionThreshold = 0.015; // pixels threshold for detecting motion
+    this.motionThreshold = 0.08; // pixels threshold for detecting motion - HIGHER
     this.fpsHistory = [];
     this.lastFrameTime = Date.now();
     this.fps = 0;
@@ -48,7 +48,7 @@ class EnhancedPoseTracker {
       let smoothFactor = this.smoothingFactor;
       if (dynamicSmoothing && motion > this.motionThreshold) {
         // Reduce smoothing during active movement for faster response
-        smoothFactor = Math.max(0.4, this.smoothingFactor - (motion * 0.5));
+        smoothFactor = Math.max(0.15, this.smoothingFactor - (motion * 0.8)); // INCREASED reduction rate from 0.5 to 0.8
       }
 
       return {
@@ -197,11 +197,9 @@ function applyPoseTrackingEnhancements(landmarks) {
   // Update FPS counter
   window.poseTrackerEnhanced.updateFPS();
 
-  // Filter by confidence
-  const filtered = window.poseTrackerEnhanced.filterByConfidence(landmarks, 0.4);
-
-  // Apply smoothing
-  const smoothed = window.poseTrackerEnhanced.smoothLandmarks(filtered, true);
+  // Skip confidence filter for performance - MediaPipe already filters
+  // Just apply smoothing directly for speed
+  const smoothed = window.poseTrackerEnhanced.smoothLandmarks(landmarks, true);
 
   // Calculate motion metrics
   const metrics = window.poseTrackerEnhanced.calculateMotionMetrics(smoothed);

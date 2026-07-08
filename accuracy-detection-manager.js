@@ -8,7 +8,7 @@ class AccuracyDetectionManager {
     this.isMonitoring = false;
     this.lastAccuracy = 0;
     this.accuracyUpdateInterval = null;
-    this.updateFrequency = 500; // ms
+    this.updateFrequency = 1000; // ms
     this.hasReference = false;
     this.referenceCheckInterval = null;
   }
@@ -22,10 +22,11 @@ class AccuracyDetectionManager {
     this.isMonitoring = true;
     console.log('✅ Accuracy Detection Manager: Started monitoring');
 
-    // Periodically check if reference is loaded
+    // Periodically check if reference is loaded, but less aggressively to save CPU
     this.referenceCheckInterval = setInterval(() => {
+      if (document.hidden) return;
       this.checkReferenceStatus();
-    }, 1000);
+    }, 2000);
 
     // Periodically ensure accuracy display is updated
     this.accuracyUpdateInterval = setInterval(() => {
@@ -87,6 +88,7 @@ class AccuracyDetectionManager {
   updateAccuracyDisplay() {
     // BUG FIX: Add multiple safety checks before accessing globals
     try {
+      if (document.hidden) return;
       if (typeof referenceLandmarks === 'undefined' || typeof latestPoseLandmarks === 'undefined' || 
           typeof computePoseSimilarity === 'undefined' || typeof updateAccuracyDisplay === 'undefined') {
         return;
@@ -100,8 +102,10 @@ class AccuracyDetectionManager {
         return;
       }
       
+      // Choose source for similarity: prefer raw landmarks if hybrid realtime mode is enabled
+      const similaritySource = (window.realtimeAccuracy && typeof latestRawLandmarks !== 'undefined' && latestRawLandmarks) ? latestRawLandmarks : latestPoseLandmarks;
       // Call compute similarity
-      const accuracy = computePoseSimilarity(referenceLandmarks, latestPoseLandmarks);
+      const accuracy = computePoseSimilarity(referenceLandmarks, similaritySource);
       
       if (!Number.isFinite(accuracy)) {
         return;

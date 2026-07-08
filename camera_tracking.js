@@ -27,6 +27,7 @@ let poseSenderIntervalId = null;
 let lastAccuracyUpdate = 0;
 const mirrorMode = true;
 const poseSelfieMode = true;
+const shouldMirrorLandmarks = mirrorMode && !poseSelfieMode;
 
 window.realtimeAccuracy = true;
 window.latestPoseLandmarks = null;
@@ -111,8 +112,9 @@ function initPose() {
 
 function toCanvasPoint(landmark) {
   const x = (landmark.x || 0) * canvasElement.width;
+  const shouldFlipX = mirrorMode !== poseSelfieMode;
   return {
-    x: mirrorMode ? canvasElement.width - x : x,
+    x: shouldFlipX ? canvasElement.width - x : x,
     y: (landmark.y || 0) * canvasElement.height
   };
 }

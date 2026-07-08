@@ -1,0 +1,1610 @@
+const videoElement = document.getElementById('input_video');
+const canvasElement = document.getElementById('output_canvas');
+const canvasCtx = canvasElement.getContext('2d');
+const statusElement = document.getElementById('status');
+const startBtn = document.getElementById('startBtn');
+const stopBtn = document.getElementById('stopBtn');
+const refUpload = document.getElementById('refUpload');
+const setRefBtn = document.getElementById('setRefBtn');
+const refCanvasEl = document.getElementById('refCanvas');
+const refCtx = refCanvasEl ? refCanvasEl.getContext('2d') : null;
+const accuracyResult = document.getElementById('accuracyResult');
+const thumbnailsContainer = document.getElementById('thumbnailsContainer');
+const thresholdSlider = document.getElementById('thresholdSlider');
+const thresholdLabel = document.getElementById('thresholdLabel');
+const thresholdSliderSecondary = document.getElementById('thresholdSliderSecondary');
+const thresholdLabelSecondary = document.getElementById('thresholdLabelSecondary');
+const saveRefBtn = document.getElementById('saveRefBtn');
+const savedContainer = document.getElementById('savedContainer');
+const clearSavedBtn = document.getElementById('clearSavedBtn');
+const exportRefsBtn = document.getElementById('exportRefsBtn');
+const importRefsInput = document.getElementById('importRefsInput');
+const forceNoMirrorBtn = document.getElementById('forceNoMirrorBtn');
+const pageHeading = document.querySelector('.page-heading');
+const pageSubtitle = document.querySelector('.page-subtitle');
+const patientTabBtn = document.getElementById('patientTabBtn');
+const adminTabBtn = document.getElementById('adminTabBtn');
+const patientPage = document.getElementById('patientPage');
+const adminPage = document.getElementById('adminPage');
+const adminRefUpload = document.getElementById('adminRefUpload');
+const adminGallery = document.getElementById('adminGallery');
+const startBtnSecondary = document.getElementById('startBtnSecondary');
+const stopBtnSecondary = document.getElementById('stopBtnSecondary');
+const summaryTherapy = document.getElementById('summaryTherapy');
+const summaryResult = document.getElementById('summaryResult');
+const summaryJoint = document.getElementById('summaryJoint');
+const sessionStatus = document.getElementById('sessionStatus');
+const sessionAccuracy = document.getElementById('sessionAccuracy');
+const sessionRecommendation = document.getElementById('sessionRecommendation');
+const sessionAction = document.getElementById('sessionAction');
+const therapyAction = document.getElementById('therapyAction');
+const therapyResult = document.getElementById('therapyResult');
+const jointMovement = document.getElementById('jointMovement');
+const patientName = document.getElementById('patientName');
+const patientAge = document.getElementById('patientAge');
+const therapySession = document.getElementById('therapySession');
+const sessionDate = document.getElementById('sessionDate');
+const cameraReferencePanel = document.getElementById('cameraReferencePanel');
+const sessionHistoryList = document.getElementById('sessionHistoryList');
+const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+const cameraRefImage = document.getElementById('cameraRefImage');
+const cameraAccuracyValue = document.getElementById('cameraAccuracyValue');
+const cameraAccuracyResult = document.getElementById('cameraAccuracyResult');
+let mediaStream = null;
+let isRunning = false;
+let animationFrameId = null;
+let poseRef = null;
+let referenceLandmarks = null;
+let referenceImage = null;
+let references = [];
+let selectedRefIndex = -1;
+let similarityThreshold = 70;
+let mirrorCanvas = false;
+let latestPoseLandmarks = null;
+let poseTimeoutId = null;
+
+function updateStatus(message, isError = false) {
+  statusElement.textContent = message;
+  statusElement.style.color = isError ? '#ff8080' : '#ffffff';
+  console.log('[STATUS]', message);
+}
+
+function syncPatientSummary() {
+  if (summaryTherapy) summaryTherapy.textContent = therapyAction?.value || '-';
+  if (summaryResult) summaryResult.textContent = therapyResult?.value || '-';
+  if (summaryJoint) summaryJoint.textContent = jointMovement?.value || '-';
+  updateSessionResult(null);
+}
+
+function updateSessionResult(percent) {
+  const value = Number.isFinite(percent) ? percent : null;
+  let status = 'Menunggu';
+  let recommendation = 'Tunggu hasil deteksi.';
+  let accuracyText = '--';
+
+  if (value !== null) {
+    const safePercent = Math.min(100, Math.max(0, value));
+    accuracyText = `${safePercent.toFixed(1)}%`;
+    if (safePercent >= similarityThreshold) {
+      status = 'Bagus';
+      recommendation = 'Lanjutkan sesi dan catat hasil terapi.';
+    } else if (safePercent >= similarityThreshold * 0.8) {
+      status = 'Cukup';
+      recommendation = 'Ulangi gerakan dengan fokus pada sendi yang dipantau.';
+    } else {
+      status = 'Perlu Perbaikan';
+      recommendation = 'Ulangi sesi dengan referensi tambahan atau koreksi postur.';
+    }
+  }
+
+  if (sessionStatus) sessionStatus.textContent = status;
+  if (sessionAccuracy) sessionAccuracy.textContent = accuracyText;
+  if (sessionRecommendation) sessionRecommendation.textContent = recommendation;
+  if (sessionAction) sessionAction.textContent = therapyAction?.value || '-';
+}
+
+function setButtons() {
+  if (startBtn) startBtn.textContent = isRunning ? 'Jeda' : 'Mulai';
+  if (stopBtn) stopBtn.disabled = !isRunning;
+  if (startBtnSecondary) startBtnSecondary.textContent = isRunning ? 'Jeda' : '▶️ Mulai';
+  if (stopBtnSecondary) stopBtnSecondary.disabled = !isRunning;
+}
+
+async function getCameraPermissionState() {
+  if (!navigator.permissions || !navigator.permissions.query) return 'unknown';
+  try {
+    const permission = await navigator.permissions.query({ name: 'camera' });
+    return permission.state;
+  } catch (error) {
+    console.warn('Permission API tidak tersedia untuk camera', error);
+    return 'unknown';
+  }
+}
+
+let poseBusy = false;
+let frameCounter = 0;
+let lastDrawTime = Date.now();
+let lastPoseSendTime = Date.now();
+let drawInterval = 40; // Target ~25fps for drawing (smoother visuals)
+let poseSendInterval = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth <= 768 ? 140 : 100; // pose processing frequency (reduced rate in emergency)
+let computeCounter = 0; // Throttle heavy computations
+let cachedRefDistances = null;
+let cachedLiveDistances = null;
+let cachedSimilarity = 0;
+let lastDrawnLandmarks = null;
+const smoothingAlpha = 0.35; // 0..1, lower = more responsive, less lag
+let latestRawLandmarks = null; // store raw landmarks for accuracy computations
+let lastLabelDrawTime = 0;
+const labelDrawIntervalMs = 1000; // draw textual labels at most once per second
+let lastOnResultsAt = 0;
+let poseWatchdogId = null;
+let lastComputeAt = 0;
+// Hybrid accuracy: compute from raw landmarks while drawing uses smoothed landmarks
+window.realtimeAccuracy = true; // default: compute accuracy from raw (more responsive)
+// Do not show debug telemetry UI by default
+// Enable debug telemetry temporarily to diagnose drawing/accuracy issues
+// Enable debug telemetry by default to aid visibility when recovering
+window.showDebugTelemetry = true;
+// Emergency mode off by default for stability
+window.emergencyMode = false;
+
+window.setRealtimeAccuracy = function (enabled) {
+  window.realtimeAccuracy = !!enabled;
+};
+
+// Force unmirror when drawing so overlay aligns with user (default: true)
+window.forceUnmirror = true;
+
+// TEMP DEBUG: simple mode to bypass smoothing and use raw landmarks for both drawing and accuracy
+// default to simple mode so visuals map directly to raw landmarks (less smoothing complexity)
+window.debugSimpleMode = true;
+
+function startLiveProcessing() {
+  if (!isRunning) return;
+  
+  const now = Date.now();
+
+  // Send pose frame for processing at a lower cadence to reduce CPU load
+  if (pose && typeof pose.send === 'function' && videoElement.readyState >= 2) {
+    if (!poseBusy && now - lastPoseSendTime >= poseSendInterval) {
+      poseBusy = true;
+      lastPoseSendTime = now;
+      if (poseTimeoutId) {
+        clearTimeout(poseTimeoutId);
+      }
+      poseTimeoutId = window.setTimeout(() => {
+        poseBusy = false;
+        poseTimeoutId = null;
+      }, 180);
+      
+      try {
+        console.log('sending pose frame at', new Date().toISOString());
+        pose.send({ image: videoElement });
+      } catch (error) {
+        console.warn('pose.send failed', error);
+        poseBusy = false;
+        if (poseTimeoutId) {
+          clearTimeout(poseTimeoutId);
+          poseTimeoutId = null;
+        }
+      }
+    }
+  }
+  
+  // Draw frame at controlled rate (throttled)
+  if (now - lastDrawTime >= drawInterval) {
+    drawVideoFrame();
+    lastDrawTime = now;
+  }
+  
+  // Continue animation loop - fast as possible
+  animationFrameId = requestAnimationFrame(startLiveProcessing);
+}
+
+// Fallback sender (ensures pose receives frames even if RAF throttled)
+let poseSenderIntervalId = null;
+
+function drawVideoFrame() {
+  if (!isRunning || !videoElement || !canvasElement || !canvasCtx) return;
+
+  try {
+    if (videoElement.readyState < 2 || !videoElement.videoWidth || !videoElement.videoHeight) return;
+
+    const maxDisplayWidth = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth <= 768 ? 640 : 960;
+    const targetWidth = Math.min(videoElement.videoWidth, maxDisplayWidth);
+    const targetHeight = Math.round(targetWidth * (videoElement.videoHeight / videoElement.videoWidth));
+
+    if (canvasElement.width !== targetWidth || canvasElement.height !== targetHeight) {
+      canvasElement.width = targetWidth;
+      canvasElement.height = targetHeight;
+    }
+
+    canvasCtx.setTransform(1, 0, 0, 1, 0, 0);
+    canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+    // Optionally unmirror the video when drawing so overlays align with user
+    if (window.forceUnmirror) {
+      canvasCtx.save();
+      canvasCtx.translate(canvasElement.width, 0);
+      canvasCtx.scale(-1, 1);
+      canvasCtx.drawImage(videoElement, 0, 0, targetWidth, targetHeight);
+      canvasCtx.restore();
+    } else {
+      canvasCtx.drawImage(videoElement, 0, 0, targetWidth, targetHeight);
+    }
+
+    // Draw overlays (reference + live). In emergency mode use lightweight manual drawing.
+    if (referenceLandmarks?.length > 0) {
+      // reference overlay is subtle; use manual lightweight lines in emergency
+      if (window.emergencyMode) {
+        drawNerveLines(referenceLandmarks);
+      } else {
+        drawReferenceOverlay(referenceLandmarks);
+      }
+    }
+
+    // Interpolate/smooth latestPoseLandmarks for visuals
+    const smoothed = interpolateLandmarks(latestPoseLandmarks, lastDrawnLandmarks, smoothingAlpha);
+    if (smoothed && smoothed.length > 0) {
+      if (window.emergencyMode) {
+        // manual lightweight draw: connections + small points
+        drawNerveLines(smoothed);
+        for (let i = 0; i < smoothed.length; i++) {
+          const lm = smoothed[i];
+          if (!lm) continue;
+          const p = toCanvasPoint(lm);
+          canvasCtx.fillStyle = '#ff4d6d';
+          canvasCtx.beginPath();
+          canvasCtx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+          canvasCtx.fill();
+        }
+      } else {
+        drawPoseOverlay(smoothed);
+      }
+      lastDrawnLandmarks = smoothed;
+    }
+  } catch (error) {
+    console.warn('drawVideoFrame error:', error);
+  }
+}
+
+// Interpolate between previous landmarks and current ones to produce smooth motion
+function interpolateLandmarks(current, previous, alpha) {
+  if (!current) return previous || null;
+  if (!previous) return current.map((p) => ({ x: p.x, y: p.y, z: p.z }));
+  const out = new Array(current.length);
+  for (let i = 0; i < current.length; i++) {
+    const c = current[i] || { x: 0.5, y: 0.5, z: 0 };
+    const p = previous[i] || c;
+    out[i] = {
+      x: p.x * alpha + c.x * (1 - alpha),
+      y: p.y * alpha + c.y * (1 - alpha),
+      z: p.z * alpha + c.z * (1 - alpha)
+    };
+  }
+  return out;
+}
+
+function prepareVideoElement() {
+  if (!videoElement) return;
+  videoElement.setAttribute('playsinline', 'true');
+  videoElement.setAttribute('autoplay', 'true');
+  videoElement.setAttribute('muted', 'true');
+  videoElement.playsInline = true;
+  videoElement.muted = true;
+  videoElement.style.transform = 'scaleX(1)';
+  if (canvasElement) canvasElement.style.transform = 'scaleX(1)';
+}
+
+function ensureDebugTelemetry() {
+  if (document.getElementById('debugTelemetry')) return;
+  const d = document.createElement('div');
+  d.id = 'debugTelemetry';
+  d.style.cssText = 'position:fixed;right:12px;bottom:12px;background:#111;color:#fff;padding:8px 10px;border-radius:8px;font-size:12px;z-index:9999;opacity:0.95;';
+  d.innerHTML = `
+    <div id="dbgText">debug telemetry</div>
+    <div style="margin-top:6px;display:flex;gap:6px;">
+      <button id="dbgToggleSimple" style="font-size:11px;padding:6px;border-radius:6px;">Simple: ${window.debugSimpleMode ? 'ON' : 'OFF'}</button>
+      <button id="dbgToggleRealtime" style="font-size:11px;padding:6px;border-radius:6px;">Realtime: ${window.realtimeAccuracy ? 'ON' : 'OFF'}</button>
+    </div>
+  `;
+  document.body.appendChild(d);
+  // Attach handlers
+  document.getElementById('dbgToggleSimple').addEventListener('click', () => {
+    window.debugSimpleMode = !window.debugSimpleMode;
+    document.getElementById('dbgToggleSimple').textContent = `Simple: ${window.debugSimpleMode ? 'ON' : 'OFF'}`;
+  });
+  document.getElementById('dbgToggleRealtime').addEventListener('click', () => {
+    window.realtimeAccuracy = !window.realtimeAccuracy;
+    document.getElementById('dbgToggleRealtime').textContent = `Realtime: ${window.realtimeAccuracy ? 'ON' : 'OFF'}`;
+  });
+}
+
+async function getCameraStream() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    throw new Error('Browser tidak mendukung akses kamera.');
+  }
+
+  const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth <= 768;
+  const targetWidth = isMobile ? { ideal: 640 } : { ideal: 800 };
+  const targetHeight = isMobile ? { ideal: 480 } : { ideal: 600 };
+
+  const constraintSets = [
+    {
+      video: {
+        facingMode: { ideal: 'user' },
+        width: targetWidth,
+        height: targetHeight,
+        frameRate: { ideal: 15, max: 20 }
+      }
+    },
+    {
+      video: {
+        facingMode: 'user',
+        width: { ideal: 480 },
+        height: { ideal: 360 },
+        frameRate: { ideal: 15, max: 20 }
+      }
+    },
+    {
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: targetWidth,
+        height: targetHeight,
+        frameRate: { ideal: 15, max: 20 }
+      }
+    },
+    { video: true }
+  ];
+
+  let lastError = null;
+  for (const constraints of constraintSets) {
+    try {
+      return await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (error) {
+      lastError = error;
+      console.warn('Kunci kamera gagal, mencoba fallback:', error);
+    }
+  }
+
+  throw lastError || new Error('Tidak bisa mendapatkan akses kamera.');
+}
+
+const nerveConnections = [
+  [11, 13], [13, 15], [12, 14], [14, 16],
+  [11, 23], [12, 24], [23, 24],
+  [23, 25], [24, 26], [25, 27], [26, 28],
+  [11, 12], [23, 24],
+  [0, 1], [1, 2], [2, 3], [3, 7], [0, 4], [4, 5], [5, 6], [6, 8]
+];
+
+const landmarkLabels = {
+  0: { title: 'Hidung', subtitle: 'Tulang Hidung, Saraf Trigeminal' },
+  7: { title: 'Telinga Kiri', subtitle: 'Tulang Temporal, Saraf Kranial' },
+  8: { title: 'Telinga Kanan', subtitle: 'Tulang Temporal, Saraf Kranial' },
+  11: { title: 'Bahu Kiri', subtitle: 'Sendi Peluru, Clavicula & Scapula' },
+  12: { title: 'Bahu Kanan', subtitle: 'Sendi Peluru, Clavicula & Scapula' },
+  13: { title: 'Siku Kiri', subtitle: 'Sendi Engsel, Saraf Radial/Ulnar' },
+  14: { title: 'Siku Kanan', subtitle: 'Sendi Engsel, Saraf Radial/Ulnar' },
+  15: { title: 'Pergelangan Kiri', subtitle: 'Sendi Geser, Saraf Median' },
+  16: { title: 'Pergelangan Kanan', subtitle: 'Sendi Geser, Saraf Median' },
+  17: { title: 'Jari Kelingking Kiri', subtitle: 'Falanges, Saraf Ulnaris' },
+  18: { title: 'Jari Kelingking Kanan', subtitle: 'Falanges, Saraf Ulnaris' },
+  19: { title: 'Jari Telunjuk Kiri', subtitle: 'Falanges, Saraf Medianus' },
+  20: { title: 'Jari Telunjuk Kanan', subtitle: 'Falanges, Saraf Medianus' },
+  21: { title: 'Jempol Kiri', subtitle: 'Sendi Pelana, Saraf Medianus' },
+  22: { title: 'Jempol Kanan', subtitle: 'Sendi Pelana, Saraf Medianus' },
+  23: { title: 'Panggul Kiri', subtitle: 'Os Coxae, Plexus Lumbalis' },
+  24: { title: 'Panggul Kanan', subtitle: 'Os Coxae, Plexus Lumbalis' },
+  25: { title: 'Lutut Kiri', subtitle: 'Sendi Engsel, Patella, Saraf Femoralis' },
+  26: { title: 'Lutut Kanan', subtitle: 'Sendi Engsel, Patella, Saraf Femoralis' },
+  27: { title: 'Pergelangan Kaki Kiri', subtitle: 'Sendi Engsel, Saraf Tibialis' },
+  28: { title: 'Pergelangan Kaki Kanan', subtitle: 'Sendi Engsel, Saraf Tibialis' }
+};
+
+function toCanvasPoint(landmark) {
+  if (!landmark) return { x: 0, y: 0 };
+  // If we unmirrored the video when drawing, invert X so landmarks align visually
+  const normalizedX = window.forceUnmirror ? (1 - (landmark.x || 0)) : (landmark.x || 0);
+  return {
+    x: normalizedX * canvasElement.width,
+    y: (landmark.y || 0) * canvasElement.height
+  };
+}
+
+// Utility: create a downsized canvas from an image to reduce inference cost
+function createSmallCanvasFromImage(img, maxDim = 320) {
+  const maxSide = Math.max(1, Math.max(img.width || 1, img.height || 1));
+  const scale = Math.min(1, maxDim / maxSide);
+  const w = Math.max(1, Math.round((img.width || 1) * scale));
+  const h = Math.max(1, Math.round((img.height || 1) * scale));
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext('2d');
+  ctx.drawImage(img, 0, 0, w, h);
+  return c;
+}
+
+function drawGlowPoint(point, color = '#ff4d6d', radius = 5) {
+  if (!canvasCtx || !point) return;
+  // Simple fast circle - no gradients
+  canvasCtx.fillStyle = color;
+  canvasCtx.beginPath();
+  canvasCtx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+  canvasCtx.fill();
+}
+
+function drawReferenceOverlay(landmarks) {
+  if (!canvasCtx || !landmarks?.length) return;
+  
+  canvasCtx.save();
+  canvasCtx.globalAlpha = 0.2; // Very subtle
+  
+  try {
+    // Simple solid lines - no gradients
+    if (typeof drawConnectors === 'function') {
+      drawConnectors(canvasCtx, landmarks, POSE_CONNECTIONS, {
+        color: 'rgba(96, 156, 255, 0.4)',
+        lineWidth: 1 // Very thin
+      });
+    }
+    // Skip landmarks for reference - just lines
+  } finally {
+    canvasCtx.restore();
+  }
+}
+
+function drawPoseOverlay(landmarks) {
+  if (!canvasCtx || !landmarks?.length) return;
+
+  canvasCtx.save();
+  canvasCtx.globalAlpha = 0.95; // Nearly opaque for active pose
+  
+  try {
+    // Skip filtering for performance - draw all detected landmarks
+    // Draw connections (lines between keypoints)
+    if (typeof drawConnectors === 'function') {
+      drawConnectors(canvasCtx, landmarks, POSE_CONNECTIONS, {
+        color: 'rgba(124,252,0,0.95)',
+        lineWidth: 2.5 // Slightly thinner
+      });
+    } else {
+      drawNerveLines(landmarks);
+    }
+
+    // Draw keypoints (dots) - simple and fast
+    if (typeof drawLandmarks === 'function') {
+      drawLandmarks(canvasCtx, landmarks, {
+        color: '#ff4d6d',
+        lineWidth: 0,
+        radius: 3 // Smaller
+      });
+    } else {
+      // Fast direct circle drawing - no glow
+      for (let i = 0; i < landmarks.length; i++) {
+        const landmark = landmarks[i];
+        if (landmark?.x && landmark?.y) {
+          const point = toCanvasPoint(landmark);
+          canvasCtx.fillStyle = '#ff4d6d';
+          canvasCtx.beginPath();
+          canvasCtx.arc(point.x, point.y, 3, 0, Math.PI * 2);
+          canvasCtx.fill();
+        }
+      }
+    }
+    // Draw textual labels at a lower frequency to save CPU
+    try {
+      const now = Date.now();
+      if (now - lastLabelDrawTime >= labelDrawIntervalMs) {
+        lastLabelDrawTime = now;
+        drawLabelSet(landmarks);
+      }
+    } catch (e) {
+      // ignore label draw errors
+    }
+  } finally {
+    canvasCtx.restore();
+  }
+}
+
+function drawNerveLines(landmarks) {
+  canvasCtx.save();
+  canvasCtx.lineWidth = 2; // Thinner
+  canvasCtx.strokeStyle = 'rgba(124,252,0,0.9)'; // Simple solid color
+  // NO shadow - too expensive
+  
+  nerveConnections.forEach(([i, j]) => {
+    if (!landmarks[i] || !landmarks[j]) return;
+    const a = toCanvasPoint(landmarks[i]);
+    const b = toCanvasPoint(landmarks[j]);
+    canvasCtx.beginPath();
+    canvasCtx.moveTo(a.x, a.y);
+    canvasCtx.lineTo(b.x, b.y);
+    canvasCtx.stroke();
+  });
+  
+  canvasCtx.restore();
+}
+
+function onReferenceResults(results) {
+  if (!results.image) return;
+  if (!results.poseLandmarks) {
+    updateStatus('Tidak dapat mendeteksi pose pada foto referensi.', true);
+    return;
+  }
+  referenceLandmarks = results.poseLandmarks.map((l) => ({ x: l.x, y: l.y, z: l.z }));
+  // draw preview
+  if (refCanvasEl && refCtx) {
+    refCanvasEl.width = Math.min(480, results.image.width);
+    refCanvasEl.height = Math.min(360, results.image.height * (refCanvasEl.width / results.image.width));
+    refCtx.setTransform(1, 0, 0, 1, 0, 0);
+    refCtx.clearRect(0, 0, refCanvasEl.width, refCanvasEl.height);
+    refCtx.drawImage(results.image, 0, 0, refCanvasEl.width, refCanvasEl.height);
+    if (typeof drawConnectors === 'function' && typeof drawLandmarks === 'function') {
+      drawConnectors(refCtx, results.poseLandmarks, POSE_CONNECTIONS, { color: 'rgba(124,252,0,0.9)', lineWidth: 2 });
+      drawLandmarks(refCtx, results.poseLandmarks, { color: '#fff', lineWidth: 1, radius: 2 });
+    }
+  }
+  updateStatus('Foto referensi tersimpan. Kini sistem dapat membandingkan posisi.', false);
+  // Cache computed landmarks into saved refs if matching image found to avoid recompute
+  try {
+    const saved = JSON.parse(localStorage.getItem('savedPoseRefs') || '[]');
+    let changed = false;
+    for (let i = 0; i < saved.length; i++) {
+      const item = saved[i];
+      if (item && item.image && referenceImage && item.image === referenceImage.src) {
+        if (!item.landmarks || item.landmarks.length === 0) {
+          item.landmarks = referenceLandmarks;
+          changed = true;
+        }
+      }
+    }
+    if (changed) localStorage.setItem('savedPoseRefs', JSON.stringify(saved));
+  } catch (e) {
+    // ignore cache write errors
+  }
+}
+
+function saveCurrentReferenceToLocal() {
+  if (!referenceLandmarks || !refCanvasEl) {
+    updateStatus('Tidak ada referensi aktif untuk disimpan.', true);
+    return;
+  }
+  try {
+    const dataUrl = refCanvasEl.toDataURL('image/jpeg', 0.9);
+    const saved = JSON.parse(localStorage.getItem('savedPoseRefs') || '[]');
+    saved.push({ name: `ref-${Date.now()}`, image: dataUrl, landmarks: referenceLandmarks });
+    localStorage.setItem('savedPoseRefs', JSON.stringify(saved));
+    renderSavedRefs();
+    renderAdminGallery();
+    updateStatus('Referensi disimpan ke browser.', false);
+  } catch (e) {
+    console.error('save error', e);
+    updateStatus('Gagal menyimpan referensi.', true);
+  }
+}
+
+function loadReferenceFromDataUrl(dataUrl, fallbackName = '') {
+  const img = new Image();
+  img.onload = () => {
+    referenceImage = img;
+    showCameraReferencePreview(dataUrl);
+    if (poseRef && typeof poseRef.send === 'function') {
+      try {
+        console.log('Sending downscaled reference to poseRef for landmark computation');
+        const small = createSmallCanvasFromImage(img, 320);
+        poseRef.send({ image: small });
+      } catch (err) {
+        console.warn('poseRef.send failed', err);
+        updateStatus('❌ Pose reference gagal memproses foto. Coba refresh halaman.', true);
+      }
+      // BUG FIX: Only show success message after poseRef.send() is called
+      if (fallbackName) {
+        updateStatus(`✅ Referensi ${fallbackName} dimuat untuk pencocokan otomatis.`, false);
+      }
+    } else {
+      updateStatus('❌ Pose reference tidak tersedia. Coba refresh halaman.', true);
+    }
+  };
+  img.onerror = () => {
+    updateStatus(`❌ Gagal memuat foto referensi: ${fallbackName}. File mungkin rusak.`, true);
+  };
+  img.src = dataUrl;
+}
+
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => resolve(ev.target.result);
+    reader.onerror = () => reject(new Error('Gagal membaca file gambar'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function waitAnimationFrame() {
+  return new Promise((resolve) => requestAnimationFrame(resolve));
+}
+
+function compressImageFile(file, maxDimension = 800) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const ratio = Math.min(1, maxDimension / Math.max(img.width, img.height));
+      const width = Math.round(img.width * ratio);
+      const height = Math.round(img.height * ratio);
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Canvas context tidak tersedia'));
+        return;
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          reject(new Error('Gagal mengompres gambar'));
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = (ev) => resolve(ev.target.result);
+        reader.onerror = () => reject(new Error('Gagal membaca hasil kompresi'));
+        reader.readAsDataURL(blob);
+      }, 'image/jpeg', 0.75);
+    };
+    img.onerror = () => reject(new Error('Gagal memuat file gambar'));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+function autoLoadFirstReference() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('savedPoseRefs') || '[]');
+    const first = saved.find((item) => item && item.image);
+    if (first) {
+      loadReferenceFromDataUrl(first.image, first.name || 'pertama');
+    }
+  } catch (error) {
+    console.warn('autoLoadFirstReference failed', error);
+  }
+}
+
+function showCameraReferencePreview(src) {
+  if (!cameraReferencePanel || !cameraRefImage) return;
+  cameraRefImage.src = src || '';
+}
+
+function hideCameraReferencePreview() {
+  if (!cameraReferencePanel || !cameraRefImage) return;
+  cameraRefImage.src = '';
+}
+
+function tryAutoLoadReferenceForCamera() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('savedPoseRefs') || '[]');
+    const first = saved.find((item) => item && item.image);
+    if (first) {
+      loadReferenceFromDataUrl(first.image, first.name || 'referensi otomatis');
+      showCameraReferencePreview(first.image);
+      if (cameraAccuracyResult) {
+        cameraAccuracyResult.textContent = '✅ Referensi dimuat. Deteksi aktif...';
+        cameraAccuracyResult.style.color = '#d1d5db';
+      }
+      updateAccuracyDisplay(0);
+      updateStatus('📊 Accuracy detection aktif. Bandingkan pose dengan referensi.', false);
+      return true;
+    } else {
+      showCameraReferencePreview('');
+      if (cameraAccuracyResult) {
+        cameraAccuracyResult.textContent = '⚠️ Tidak ada referensi. Upload foto di Admin Panel.';
+        cameraAccuracyResult.style.color = '#ffaa00';
+      }
+      updateAccuracyDisplay(0);
+      updateStatus('⚠️ Tidak ada referensi tersimpan untuk deteksi akurasi.', false);
+      return false;
+    }
+  } catch (error) {
+    console.warn('tryAutoLoadReferenceForCamera failed', error);
+    if (cameraAccuracyResult) {
+      cameraAccuracyResult.textContent = '❌ Error loading reference';
+      cameraAccuracyResult.style.color = '#ff6b6b';
+    }
+    return false;
+  }
+}
+
+function renderAdminGallery() {
+  if (!adminGallery) return;
+  const saved = JSON.parse(localStorage.getItem('savedPoseRefs') || '[]');
+  adminGallery.innerHTML = '';
+  if (!saved.length) {
+    adminGallery.innerHTML = '<div class="admin-hint">Belum ada foto referensi tersimpan.</div>';
+    return;
+  }
+  saved.forEach((item, idx) => {
+    const card = document.createElement('div');
+    card.className = 'gallery-item';
+    card.style.cursor = 'pointer';
+    card.title = item.name || `Referensi ${idx + 1}`;
+    const img = document.createElement('img');
+    img.src = item.image;
+    img.alt = item.name || `referensi-${idx + 1}`;
+    const label = document.createElement('div');
+    label.className = 'gallery-name';
+    label.textContent = item.name || `Referensi ${idx + 1}`;
+    card.addEventListener('click', () => loadReferenceFromDataUrl(item.image, item.name || `Referensi ${idx + 1}`));
+    card.appendChild(img);
+    card.appendChild(label);
+    adminGallery.appendChild(card);
+  });
+}
+
+function renderSavedRefs() {
+  if (!savedContainer) return;
+  const saved = JSON.parse(localStorage.getItem('savedPoseRefs') || '[]');
+  savedContainer.innerHTML = '';
+  if (!saved.length) {
+    savedContainer.innerHTML = '<div class="admin-hint">Belum ada foto referensi tersimpan.</div>';
+    return;
+  }
+  saved.forEach((item, idx) => {
+    const card = document.createElement('div');
+    card.className = 'gallery-item';
+    card.style.cursor = 'pointer';
+    card.tabIndex = 0;
+    card.title = item.name || `Referensi ${idx + 1}`;
+
+    const img = document.createElement('img');
+    img.src = item.image;
+    img.alt = item.name || `Referensi ${idx + 1}`;
+
+    const label = document.createElement('div');
+    label.className = 'gallery-name';
+    label.textContent = item.name || `Referensi ${idx + 1}`;
+
+    const loadReference = () => {
+      const im = new Image();
+      im.onload = () => {
+        referenceImage = im;
+        // BUG FIX: Validate landmarks exist before using
+        if (item.landmarks && Array.isArray(item.landmarks) && item.landmarks.length > 0) {
+          referenceLandmarks = item.landmarks;
+          updateStatus('✅ Referensi dimuat dari galeri tersimpan (pre-computed).', false);
+        } else {
+          // If landmarks are missing, need to recompute them
+          if (poseRef && typeof poseRef.send === 'function') {
+            poseRef.send({ image: im });
+            updateStatus('📊 Referensi dimuat. Computing landmarks..', false);
+          } else {
+            updateStatus('⚠️ Tidak bisa recompute landmarks. Pose reference tidak tersedia.', true);
+          }
+        }
+        if (refCanvasEl && refCtx) {
+          refCanvasEl.width = im.width;
+          refCanvasEl.height = im.height * (refCanvasEl.width / im.width);
+          refCtx.setTransform(1, 0, 0, 1, 0, 0);
+          refCtx.clearRect(0, 0, refCanvasEl.width, refCanvasEl.height);
+          refCtx.drawImage(im, 0, 0, refCanvasEl.width, refCanvasEl.height);
+        }
+      };
+      im.onerror = () => {
+        updateStatus('❌ Gagal memuat referensi dari galeri.', true);
+      };
+      im.src = item.image;
+    };
+
+    card.addEventListener('click', loadReference);
+    card.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        loadReference();
+      }
+    });
+
+    card.appendChild(img);
+    card.appendChild(label);
+    savedContainer.appendChild(card);
+  });
+}
+
+function clearSavedRefs() {
+  localStorage.removeItem('savedPoseRefs');
+  renderSavedRefs();
+  renderAdminGallery();
+  updateStatus('Semua referensi tersimpan dihapus.', false);
+}
+
+function exportSavedRefs() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('savedPoseRefs') || '[]');
+    const blob = new Blob([JSON.stringify(saved)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `pose_refs_${Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    updateStatus('Preset diekspor sebagai file JSON.', false);
+  } catch (e) {
+    console.error('export error', e);
+    updateStatus('Gagal mengekspor preset.', true);
+  }
+}
+
+function importSavedRefs(file) {
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      if (!Array.isArray(data)) throw new Error('Invalid format');
+      localStorage.setItem('savedPoseRefs', JSON.stringify(data));
+      renderSavedRefs();
+      updateStatus('Preset berhasil diimpor.', false);
+    } catch (err) {
+      console.error('import error', err);
+      updateStatus('Gagal mengimpor preset. Pastikan format JSON benar.', true);
+    }
+  };
+  reader.onerror = () => updateStatus('Gagal membaca file impor.', true);
+  reader.readAsText(file);
+}
+
+function computePoseSimilarity(ref, live) {
+  if (!ref || !live) return 0;
+  function centerAndScale(landmarks) {
+    const left = landmarks[11];
+    const right = landmarks[12];
+    const fallbackLeft = landmarks[23];
+    const fallbackRight = landmarks[24];
+    const a = left || fallbackLeft;
+    const b = right || fallbackRight;
+    
+    // BUG FIX: Handle case where both a and b are null/undefined
+    if (!a || !b) {
+      return { cx: 0.5, cy: 0.5, scale: 1 };
+    }
+    
+    const cx = (a.x + b.x) / 2;
+    const cy = (a.y + b.y) / 2;
+    const scale = Math.hypot(a.x - b.x, a.y - b.y) || 1e-6;
+    return { cx, cy, scale };
+  }
+  const r = centerAndScale(ref);
+  const s = centerAndScale(live);
+  // Use a focused set of major joints for faster, more robust similarity
+  const total = Math.min(ref.length, live.length);
+  const preferred = [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28];
+  const indices = preferred.filter((i) => i >= 0 && i < total);
+  // fallback: if none matched (rare), sample every other index
+  if (indices.length === 0) {
+    for (let i = 0; i < total; i += 2) indices.push(i);
+  }
+  let sum = 0;
+  let count = 0;
+  indices.forEach((i) => {
+    const ra = ref[i];
+    const la = live[i];
+    if (!ra || !la) return;
+    const rx = (ra.x - r.cx) / r.scale;
+    const ry = (ra.y - r.cy) / r.scale;
+    const lx = (la.x - s.cx) / s.scale;
+    const ly = (la.y - s.cy) / s.scale;
+    const d = Math.hypot(rx - lx, ry - ly);
+    // similarity per keypoint, tolerance roughly 0.5
+    const sim = Math.max(0, 1 - d / 0.5);
+    sum += sim;
+    count += 1;
+  });
+  if (count === 0) return 0;
+  return (sum / count) * 100; // percent
+}
+
+// Calculate joint distance metrics
+function calculateJointDistances(landmarks) {
+  if (!landmarks || landmarks.length < 2) return { distance: 0, avgDistance: 0 };
+  
+  let totalDistance = 0;
+  let count = 0;
+  
+  // Calculate distances between major joints
+  const jointPairs = [
+    [11, 13], // Left shoulder to left elbow
+    [13, 15], // Left elbow to left wrist
+    [12, 14], // Right shoulder to right elbow
+    [14, 16], // Right elbow to right wrist
+    [23, 25], // Left hip to left knee
+    [25, 27], // Left knee to left ankle
+    [24, 26], // Right hip to right knee
+    [26, 28]  // Right knee to right ankle
+  ];
+  
+  jointPairs.forEach(([i, j]) => {
+    if (landmarks[i] && landmarks[j]) {
+      const dx = landmarks[i].x - landmarks[j].x;
+      const dy = landmarks[i].y - landmarks[j].y;
+      const distance = Math.hypot(dx, dy);
+      totalDistance += distance;
+      count++;
+    }
+  });
+  
+  return {
+    distance: totalDistance,
+    avgDistance: count > 0 ? totalDistance / count : 0
+  };
+}
+
+function updateAccuracyDisplay(percent) {
+  const safePercent = Number.isFinite(percent) ? percent : 0;
+  const pass = safePercent >= similarityThreshold;
+  const resultText = `Presisi: ${safePercent.toFixed(1)}% — ${pass ? 'Benar' : 'Salah'}`;
+
+  if (accuracyResult) {
+    accuracyResult.textContent = resultText;
+    accuracyResult.style.color = pass ? '#8cff7a' : '#ff8c8c';
+  }
+  if (cameraAccuracyValue) {
+    cameraAccuracyValue.textContent = `${safePercent.toFixed(1)}%`;
+  }
+  if (cameraAccuracyResult) {
+    cameraAccuracyResult.textContent = resultText;
+    cameraAccuracyResult.style.color = pass ? '#8cff7a' : '#ff8c8c';
+  }
+  if (window.EnhancedUI && window.EnhancedUI.updateAccuracyDisplay) {
+    window.EnhancedUI.updateAccuracyDisplay(safePercent);
+  }
+  updateSessionResult(safePercent);
+}
+
+function drawLabel(point, title, subtitle) {
+  // Labels intentionally disabled for camera overlay to keep view clean
+  return;
+}
+
+function drawLabelSet(landmarks) {
+  // Disabled: no textual labels on camera overlay
+  return;
+}
+
+function onResults(results) {
+  if (!results.image || !canvasElement || !canvasCtx) {
+    poseBusy = false;
+    if (poseTimeoutId) {
+      clearTimeout(poseTimeoutId);
+      poseTimeoutId = null;
+    }
+    return;
+  }
+
+  // Hybrid handling: keep raw landmarks and apply smoothing for rendering only
+  const rawLandmarks = results.poseLandmarks || null;
+  console.log('onResults called, raw landmarks:', rawLandmarks ? rawLandmarks.length : 0);
+  // mark last successful results time for watchdog
+  lastOnResultsAt = Date.now();
+  // store raw globally for accuracy computations
+  latestRawLandmarks = rawLandmarks;
+  let processedLandmarks = rawLandmarks;
+
+  if (window.debugSimpleMode) {
+    processedLandmarks = rawLandmarks;
+  } else if (rawLandmarks && typeof applyPoseTrackingEnhancements === 'function') {
+    processedLandmarks = applyPoseTrackingEnhancements(rawLandmarks);
+  }
+
+  latestPoseLandmarks = processedLandmarks;
+
+  if (processedLandmarks) {
+    const landmarks = processedLandmarks; // smoothed for visuals
+    // THROTTLE: Only update status every 3 frames
+    if (++frameCounter % 3 === 0) {
+      updateStatus('🎯 Audience terdeteksi. Titik dan garis saraf mengikuti gerakan real-time.');
+    }
+
+    // optional debug telemetry (disabled by default)
+    try {
+      if (window.showDebugTelemetry) {
+        ensureDebugTelemetry();
+        const el = document.getElementById('debugTelemetry');
+        if (el) {
+          const hasDrawConnectors = typeof drawConnectors === 'function';
+          const hasDrawLandmarks = typeof drawLandmarks === 'function';
+          const posePresent = typeof pose !== 'undefined' && pose !== null;
+          const poseRefPresent = typeof poseRef !== 'undefined' && poseRef !== null;
+          const refCount = Array.isArray(referenceLandmarks) ? referenceLandmarks.length : 0;
+          const rawCount = rawLandmarks ? rawLandmarks.length : 0;
+          const smoothCount = processedLandmarks ? processedLandmarks.length : 0;
+          el.innerHTML = `
+            <div style="font-weight:600; margin-bottom:6px;">debug</div>
+            <div style="font-size:12px">time: ${new Date().toLocaleTimeString()}</div>
+            <div style="font-size:12px">rawPts: ${rawCount} smoothed: ${smoothCount} refPts: ${refCount}</div>
+            <div style="font-size:12px">drawConnectors: ${hasDrawConnectors} drawLandmarks: ${hasDrawLandmarks}</div>
+            <div style="font-size:12px">pose: ${posePresent} poseRef: ${poseRefPresent}</div>
+          `;
+        }
+        // Also log to console for deeper inspection
+        console.log('onResults debug', {
+          time: new Date().toISOString(),
+          rawCount: rawLandmarks ? rawLandmarks.length : 0,
+          smoothCount: processedLandmarks ? processedLandmarks.length : 0,
+          refCount: Array.isArray(referenceLandmarks) ? referenceLandmarks.length : 0,
+          drawConnectors: typeof drawConnectors === 'function',
+          drawLandmarks: typeof drawLandmarks === 'function',
+          posePresent: (typeof pose !== 'undefined' && pose !== null),
+        });
+      }
+    } catch (e) {
+      console.warn('debug telemetry update failed', e);
+    }
+
+    // THROTTLE: Compute heavy metrics at most once per second to reduce CPU
+    if (referenceLandmarks) {
+      // compute an immediate similarity update (lightweight) using raw landmarks when available
+      try {
+        const now = Date.now();
+        const similaritySource = (window.realtimeAccuracy && rawLandmarks) ? rawLandmarks : landmarks;
+        // perform at least one immediate compute, then throttle subsequent heavy computes
+        if (!lastComputeAt || (now - lastComputeAt >= 800)) {
+          cachedSimilarity = computePoseSimilarity(referenceLandmarks, similaritySource);
+          updateAccuracyDisplay(cachedSimilarity);
+          lastComputeAt = now;
+          console.log('computed similarity:', cachedSimilarity);
+        }
+
+          cachedRefDistances = calculateJointDistances(referenceLandmarks);
+          cachedLiveDistances = calculateJointDistances(similaritySource);
+          if (window.EnhancedUI?.updateDistanceMetrics) {
+            window.EnhancedUI.updateDistanceMetrics(
+              cachedRefDistances.avgDistance,
+              cachedLiveDistances.avgDistance,
+              cachedSimilarity
+            );
+          }
+        }
+      } catch (err) {
+        console.warn('similarity compute failed', err);
+      }
+    }
+  } else {
+    latestPoseLandmarks = null;
+    // Only show waiting message if reference is loaded
+    if (referenceLandmarks) {
+      updateStatus('⏳ Menunggu deteksi pose... Masuk ke frame kamera.');
+    } else {
+      updateStatus('⚠️ Tidak ada referensi. Upload foto di Admin Panel untuk memulai deteksi.');
+    }
+  }
+
+  poseBusy = false;
+  if (poseTimeoutId) {
+    clearTimeout(poseTimeoutId);
+    poseTimeoutId = null;
+  }
+}
+
+let pose = null;
+if (typeof Pose !== 'undefined') {
+  pose = new Pose({
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+  });
+
+  pose.setOptions({
+    modelComplexity: 0, // Use lite model for better performance
+    smoothLandmarks: false, // Disable built-in smoothing, use our enhanced smoothing instead
+    minDetectionConfidence: 0.4,  // Lower for better detection in real-time
+    minTrackingConfidence: 0.4,   // Lower for responsive tracking
+    selfieMode: false
+  });
+  pose.onResults(onResults);
+} else {
+  updateStatus('Library MediaPipe tidak bisa dimuat. Kamera tetap bisa dipakai dalam mode langsung.', false);
+}
+
+// Create a separate Pose instance for processing reference images
+if (typeof Pose !== 'undefined') {
+  poseRef = new Pose({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
+  poseRef.setOptions({
+    modelComplexity: 0, // Use lite model for reference too
+    smoothLandmarks: false, // Disable built-in smoothing
+    minDetectionConfidence: 0.4, // Lower for better detection
+    selfieMode: false
+  });
+  poseRef.onResults(onReferenceResults);
+}
+
+function renderThumbnails(files) {
+  if (!thumbnailsContainer) return;
+  thumbnailsContainer.innerHTML = '';
+  Array.from(files).forEach((file, idx) => {
+    const url = URL.createObjectURL(file);
+    const img = document.createElement('img');
+    img.src = url;
+    img.style.width = '80px';
+    img.style.height = '60px';
+    img.style.objectFit = 'cover';
+    img.style.borderRadius = '6px';
+    img.style.cursor = 'pointer';
+    img.title = file.name;
+    img.addEventListener('click', () => {
+      // mark selection
+      Array.from(thumbnailsContainer.children).forEach((c) => c.style.outline = '');
+      img.style.outline = '3px solid rgba(109,92,255,0.6)';
+      selectedRefIndex = idx;
+      // immediately load the selected file as active reference
+      try { loadReferenceFromFile(file); } catch (e) { console.warn('Failed to load thumbnail file', e); }
+    });
+    thumbnailsContainer.appendChild(img);
+  });
+}
+
+function loadReferenceFromFile(file) {
+  const img = new Image();
+  img.onload = () => {
+    referenceImage = img;
+    if (poseRef && typeof poseRef.send === 'function') {
+      try {
+        const small = createSmallCanvasFromImage(img, 320);
+        poseRef.send({ image: small });
+      } catch (err) {
+        console.warn('poseRef.send failed for file load', err);
+        updateStatus('⚠️ Gagal memproses referensi. Coba ulangi.', true);
+      }
+    } else {
+      updateStatus('Pose reference tidak tersedia.', true);
+    }
+  };
+  img.onerror = () => updateStatus('Gagal memuat foto referensi.', true);
+  img.src = URL.createObjectURL(file);
+}
+
+if (refUpload) {
+  refUpload.addEventListener('change', (e) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    renderThumbnails(files);
+    // populate references array metadata
+    references = Array.from(files).map((f) => ({ file: f }));
+    selectedRefIndex = 0;
+    // auto-select first thumbnail outline
+    const first = thumbnailsContainer && thumbnailsContainer.children[0];
+    if (first) first.style.outline = '3px solid rgba(109,92,255,0.6)';
+  });
+}
+
+if (setRefBtn) {
+  setRefBtn.addEventListener('click', () => {
+    if (references.length === 0) {
+      updateStatus('Pilih file foto terlebih dahulu.', true);
+      return;
+    }
+    const idx = selectedRefIndex >= 0 ? selectedRefIndex : 0;
+    const file = references[idx].file;
+    loadReferenceFromFile(file);
+  });
+}
+
+function syncThreshold(value) {
+  similarityThreshold = Number(value);
+  if (thresholdLabel) thresholdLabel.textContent = `${similarityThreshold}%`;
+  if (thresholdLabelSecondary) thresholdLabelSecondary.textContent = `${similarityThreshold}%`;
+  if (thresholdSlider) thresholdSlider.value = `${similarityThreshold}`;
+  if (thresholdSliderSecondary) thresholdSliderSecondary.value = `${similarityThreshold}`;
+}
+
+function syncMirrorState(value) {
+  mirrorCanvas = !!value;
+  try { localStorage.setItem('mirrorPref', mirrorCanvas ? 'true' : 'false'); } catch (err) { console.warn('mirror save failed', err); }
+}
+
+if (forceNoMirrorBtn) {
+  forceNoMirrorBtn.addEventListener('click', () => {
+    mirrorCanvas = false;
+    if (mirrorToggle) mirrorToggle.checked = false;
+    try { localStorage.setItem('mirrorPref', 'false'); } catch (err) { console.warn('mirror save failed', err); }
+    updateStatus('Mode non-mirror dipaksa dan disimpan sebagai preferensi.', false);
+  });
+}
+
+if (saveRefBtn) saveRefBtn.addEventListener('click', saveCurrentReferenceToLocal);
+if (clearSavedBtn) clearSavedBtn.addEventListener('click', clearSavedRefs);
+if (exportRefsBtn) exportRefsBtn.addEventListener('click', exportSavedRefs);
+if (importRefsInput) importRefsInput.addEventListener('change', (e) => {
+  if (!e.target.files || e.target.files.length === 0) return; importSavedRefs(e.target.files[0]);
+});
+if (therapyAction) {
+  therapyAction.addEventListener('change', () => {
+    syncPatientSummary();
+    tryAutoLoadReferenceForCamera();
+  });
+}
+if (therapyResult) therapyResult.addEventListener('change', syncPatientSummary);
+if (jointMovement) {
+  jointMovement.addEventListener('change', () => {
+    syncPatientSummary();
+    tryAutoLoadReferenceForCamera();
+  });
+}
+
+// load saved refs on startup
+try {
+  renderSavedRefs();
+  renderAdminGallery();
+  autoLoadFirstReference();
+} catch (e) { console.warn('renderSavedRefs failed', e); }
+
+// initialize UI state
+syncThreshold(similarityThreshold);
+syncPatientSummary();
+renderSessionHistory();
+// disable mirror preference: kamera selalu tampil natural
+mirrorCanvas = false;
+
+if (adminRefUpload) {
+  adminRefUpload.addEventListener('change', async (e) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const images = Array.from(files).filter((file) => file.type.startsWith('image/')).slice(0, 20);
+    if (!images.length) {
+      updateStatus('Tidak ada file gambar valid yang dipilih.', true);
+      return;
+    }
+
+    const saved = JSON.parse(localStorage.getItem('savedPoseRefs') || '[]');
+    const newItems = [];
+    updateStatus('Memproses foto referensi admin, kamera tetap berjalan...');
+
+    for (const file of images) {
+      try {
+        const dataUrl = file.size > 500000 ? await compressImageFile(file, 700) : await readFileAsDataURL(file);
+        newItems.push({ name: file.name || `admin-ref-${saved.length + newItems.length + 1}`, image: dataUrl, landmarks: null });
+      } catch (error) {
+        console.warn('Gagal memproses file referensi admin:', file.name, error);
+      }
+      await waitAnimationFrame();
+    }
+
+    if (!newItems.length) {
+      updateStatus('Gagal memproses semua foto referensi. Coba unggah kembali satu per satu.', true);
+      return;
+    }
+
+    const merged = saved.concat(newItems);
+    try {
+      localStorage.setItem('savedPoseRefs', JSON.stringify(merged));
+    } catch (error) {
+      console.error('Gagal menyimpan referensi admin ke localStorage', error);
+      updateStatus('Penyimpanan referensi gagal. Coba dengan jumlah file lebih sedikit.', true);
+      return;
+    }
+
+    renderSavedRefs();
+    renderAdminGallery();
+    autoLoadFirstReference();
+    if (therapyAction?.value && jointMovement?.value) {
+      tryAutoLoadReferenceForCamera();
+    }
+    updateStatus(`Foto admin tersimpan ke galeri referensi (${newItems.length} file).`, false);
+  });
+}
+
+async function startCamera() {
+  const permState = await getCameraPermissionState();
+  if (permState === 'denied') {
+    updateStatus('Izin kamera saat ini ditolak. Silakan cek ikon gembok browser dan coba lagi.', true);
+  }
+
+  if (isRunning) {
+    stopCamera();
+    updateStatus('Kamera dijeda. Klik Mulai Kamera untuk melanjutkan.');
+    return;
+  }
+
+  if (!videoElement) {
+    updateStatus('Elemen video tidak tersedia. Muat ulang halaman dan coba lagi.', true);
+    return;
+  }
+
+  updateStatus('Memulai kamera...');
+  prepareVideoElement();
+
+  try {
+    mediaStream = await getCameraStream();
+    videoElement.srcObject = mediaStream;
+    await videoElement.play();
+
+    await new Promise((resolve, reject) => {
+      const onLoaded = () => {
+        videoElement.removeEventListener('loadedmetadata', onLoaded);
+        videoElement.removeEventListener('loadeddata', onLoaded);
+        resolve();
+      };
+      videoElement.addEventListener('loadedmetadata', onLoaded, { once: true });
+      videoElement.addEventListener('loadeddata', onLoaded, { once: true });
+      setTimeout(onLoaded, 1000);
+    });
+
+    if (videoElement.videoWidth && videoElement.videoHeight) {
+      canvasElement.width = videoElement.videoWidth;
+      canvasElement.height = videoElement.videoHeight;
+    }
+
+    isRunning = true;
+    setButtons();
+    updateStatus('Kamera aktif. Live tracking berjalan...');
+
+    // Auto-load reference for accuracy detection
+    const referenceLoaded = tryAutoLoadReferenceForCamera();
+    if (!referenceLoaded) {
+      // Fallback: load first reference if available
+      autoLoadFirstReference();
+    }
+
+    // Start accuracy detection monitoring
+    if (typeof startAccuracyDetection === 'function') {
+      startAccuracyDetection();
+    }
+
+    // Hide status overlay text on camera area
+    try { if (statusElement) statusElement.style.display = 'none'; } catch (e) {}
+
+    // Start animation loop
+    startLiveProcessing();
+
+    // Start a reliable periodic sender as fallback so MediaPipe receives frames
+    if (pose && typeof pose.send === 'function') {
+      if (poseSenderIntervalId) clearInterval(poseSenderIntervalId);
+      poseSenderIntervalId = setInterval(() => {
+        try {
+          if (videoElement && videoElement.readyState >= 2) pose.send({ image: videoElement });
+        } catch (err) {
+          // ignore send errors
+        }
+      }, Math.max(80, poseSendInterval));
+    }
+
+    // Start watchdog to ensure onResults is called; if missing, send canvas snapshot and attempt reinit
+    if (poseWatchdogId) clearInterval(poseWatchdogId);
+    lastOnResultsAt = 0;
+    poseWatchdogId = setInterval(() => {
+      try {
+        const age = lastOnResultsAt ? (Date.now() - lastOnResultsAt) : Infinity;
+        if (age > 3000) {
+          console.warn('Watchdog: onResults not seen recently (ms):', age);
+          try {
+            if (canvasElement && pose && typeof pose.send === 'function') {
+              pose.send({ image: canvasElement });
+              console.log('Watchdog: sent canvas snapshot to pose');
+            }
+          } catch (e) {
+            console.warn('Watchdog send canvas failed', e);
+            if (typeof Pose !== 'undefined') {
+              try {
+                console.log('Watchdog: reinitializing pose instance');
+                pose = new Pose({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
+                pose.setOptions({ modelComplexity: 0, smoothLandmarks: false, minDetectionConfidence: 0.4, minTrackingConfidence: 0.4, selfieMode: false });
+                pose.onResults(onResults);
+              } catch (reinitErr) {
+                console.error('Watchdog reinit failed', reinitErr);
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Watchdog error', err);
+      }
+    }, 1500);
+  } catch (error) {
+    console.error('camera start error', error);
+    const message = error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError'
+      ? 'Izin kamera ditolak. Periksa pengaturan kamera di origin ini.'
+      : 'Gagal mengaktifkan kamera: ' + (error.message || error);
+    updateStatus(message, true);
+    stopCamera();
+  }
+}
+
+function savePatientSessionHistory() {
+  try {
+    const history = JSON.parse(localStorage.getItem('patientSessionHistory') || '[]');
+    const record = {
+      id: Date.now(),
+      timestamp: new Date().toLocaleString('id-ID', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }),
+      patientName: patientName?.value || 'Tanpa nama',
+      age: patientAge?.value || '-',
+      sessionLabel: therapySession?.value || '-',
+      sessionDate: sessionDate?.value || new Date().toISOString().slice(0, 10),
+      therapyAction: therapyAction?.value || '-',
+      jointMovement: jointMovement?.value || '-',
+      therapyResult: therapyResult?.value || '-',
+      status: sessionStatus?.textContent || 'Menunggu',
+      accuracy: sessionAccuracy?.textContent || '--',
+      recommendation: sessionRecommendation?.textContent || ''
+    };
+    history.unshift(record);
+    if (history.length > 20) history.length = 20;
+    localStorage.setItem('patientSessionHistory', JSON.stringify(history));
+    renderSessionHistory();
+  } catch (error) {
+    console.warn('savePatientSessionHistory failed', error);
+  }
+}
+
+function renderSessionHistory() {
+  if (!sessionHistoryList) return;
+  const history = JSON.parse(localStorage.getItem('patientSessionHistory') || '[]');
+  sessionHistoryList.innerHTML = '';
+  if (!history.length) {
+    sessionHistoryList.innerHTML = '<div class="admin-hint">Belum ada riwayat pasien. Hentikan sesi setelah monitoring untuk menyimpannya.</div>';
+    return;
+  }
+  history.forEach((record) => {
+    const card = document.createElement('div');
+    card.className = 'history-card';
+    card.innerHTML = `
+      <div class="history-title">
+        <span>${record.patientName} — ${record.sessionLabel}</span>
+        <span>${record.timestamp}</span>
+      </div>
+      <div class="history-detail">
+        <div><strong>Usia:</strong> ${record.age}</div>
+        <div><strong>Hasil:</strong> ${record.therapyResult}</div>
+        <div><strong>Aksi:</strong> ${record.therapyAction}</div>
+        <div><strong>Sendi:</strong> ${record.jointMovement}</div>
+        <div><strong>Status:</strong> ${record.status}</div>
+        <div><strong>Akurasi:</strong> ${record.accuracy}</div>
+      </div>
+      <div class="history-note">${record.recommendation || '-'}</div>
+    `;
+    sessionHistoryList.appendChild(card);
+  });
+}
+
+function clearSessionHistory() {
+  localStorage.removeItem('patientSessionHistory');
+  renderSessionHistory();
+  updateStatus('Riwayat pasien dihapus.', false);
+}
+
+function stopCamera() {
+  if (animationFrameId) {
+    cancelAnimationFrame(animationFrameId);
+    animationFrameId = null;
+  }
+  if (mediaStream) {
+    mediaStream.getTracks().forEach((track) => track.stop());
+    mediaStream = null;
+  }
+  if (videoElement) {
+    try {
+      videoElement.pause();
+    } catch (error) {
+      console.warn('Gagal pause video', error);
+    }
+    if (videoElement.srcObject) {
+      videoElement.srcObject = null;
+    }
+  }
+  
+  // Stop accuracy detection monitoring
+  if (typeof stopAccuracyDetection === 'function') {
+    stopAccuracyDetection();
+  }
+
+  // Clear fallback sender
+  if (poseSenderIntervalId) {
+    clearInterval(poseSenderIntervalId);
+    poseSenderIntervalId = null;
+  }
+  if (poseWatchdogId) {
+    clearInterval(poseWatchdogId);
+    poseWatchdogId = null;
+  }
+  
+  if (sessionAccuracy && sessionAccuracy.textContent !== '--') {
+    savePatientSessionHistory();
+  }
+  isRunning = false;
+  setButtons();
+  updateStatus('Kamera berhenti. Klik Mulai Kamera untuk memulai ulang.');
+}
+
+function switchPage(target) {
+  if (patientPage && adminPage) {
+    patientPage.classList.toggle('active', target === 'patient');
+    adminPage.classList.toggle('active', target === 'admin');
+  }
+  if (patientTabBtn && adminTabBtn) {
+    patientTabBtn.classList.toggle('active', target === 'patient');
+    adminTabBtn.classList.toggle('active', target === 'admin');
+  }
+  if (pageHeading && pageSubtitle) {
+    if (target === 'admin') {
+      pageHeading.textContent = 'HALAMAN ADMIN';
+      pageSubtitle.textContent = 'Atur foto referensi, pilih hasil terapi, dan kelola galeri referensi untuk pasien.';
+    } else {
+      pageHeading.textContent = 'HALAMAN PASIEN';
+      pageSubtitle.textContent = 'Isi data pasien, pilih opsi terapi, lihat layar kamera, dan lihat akurasi secara otomatis.';
+    }
+  }
+}
+
+if (patientTabBtn) patientTabBtn.addEventListener('click', () => switchPage('patient'));
+if (adminTabBtn) adminTabBtn.addEventListener('click', () => switchPage('admin'));
+
+if (startBtnSecondary) {
+  startBtnSecondary.addEventListener('click', startCamera);
+}
+if (stopBtnSecondary) {
+  stopBtnSecondary.addEventListener('click', stopCamera);
+}
+
+if (startBtn) startBtn.addEventListener('click', startCamera);
+if (stopBtn) stopBtn.addEventListener('click', stopCamera);
+if (clearHistoryBtn) clearHistoryBtn.addEventListener('click', clearSessionHistory);
+setButtons();
+
+// setRefBtn handled earlier (loads selected thumbnail)
+
+// Quick recovery: restore safe defaults and ensure UI + references reload
+function restoreSafeMode() {
+  try {
+    window.emergencyMode = false;
+    window.showDebugTelemetry = true;
+    window.debugSimpleMode = true;
+    window.realtimeAccuracy = true;
+    poseSendInterval = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth <= 768 ? 120 : 80;
+    drawInterval = 40;
+    // Do not force page visibility here to avoid hiding the admin UI unexpectedly.
+    // Reinitialize pose instances if they were lost
+    try {
+      if (typeof Pose !== 'undefined') {
+        if (!pose) {
+          pose = new Pose({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
+          pose.setOptions({ modelComplexity: 0, smoothLandmarks: false, minDetectionConfidence: 0.4, minTrackingConfidence: 0.4, selfieMode: false });
+          pose.onResults(onResults);
+          console.log('restoreSafeMode: reinitialized pose');
+        }
+        if (!poseRef) {
+          poseRef = new Pose({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
+          poseRef.setOptions({ modelComplexity: 0, smoothLandmarks: false, minDetectionConfidence: 0.4, minTrackingConfidence: 0.4, selfieMode: false });
+          poseRef.onResults(onReferenceResults);
+          console.log('restoreSafeMode: reinitialized poseRef');
+        }
+      }
+    } catch (e) {
+      console.warn('restoreSafeMode: pose reinit failed', e);
+    }
+    // Re-render saved refs and try to reload first reference
+    try { renderSavedRefs(); renderAdminGallery(); autoLoadFirstReference(); } catch (e) { console.warn('restoreSafeMode: reload refs failed', e); }
+    // Show status if hidden
+    try { if (statusElement) statusElement.style.display = ''; } catch (e) {}
+    console.log('restoreSafeMode applied — UI restored to safe defaults');
+  } catch (err) {
+    console.error('restoreSafeMode failed', err);
+  }
+}
+
+// Add a temporary button to toggle safe-mode if developer needs to reapply,
+// and ensure we only touch DOM after it's ready to avoid runtime errors.
+function ensureSafeModeUI() {
+  try {
+    if (!document.getElementById('safeModeBtn')) {
+      const b = document.createElement('button');
+      b.id = 'safeModeBtn';
+      b.textContent = 'Restore Safe Mode';
+      b.style.cssText = 'position:fixed;right:12px;top:12px;z-index:99999;padding:8px;border-radius:6px;background:#6b7280;color:#fff;border:none;cursor:pointer;opacity:0.95;';
+      b.addEventListener('click', restoreSafeMode);
+      if (document.body) document.body.appendChild(b);
+    }
+    try { restoreSafeMode(); } catch (e) { console.warn('Automatic restoreSafeMode failed', e); }
+  } catch (err) {
+    console.warn('ensureSafeModeUI failed', err);
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', ensureSafeModeUI);
+} else {
+  ensureSafeModeUI();
+}

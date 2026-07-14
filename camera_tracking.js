@@ -25,9 +25,10 @@ let referenceLandmarks = null;
 let latestRawLandmarks = null;
 let poseSenderIntervalId = null;
 let lastAccuracyUpdate = 0;
-const mirrorMode = true;
-const poseSelfieMode = true;
-const shouldMirrorLandmarks = mirrorMode && !poseSelfieMode;
+// Normal camera and skeleton orientation, no mirroring.
+const mirrorVideo = false;
+const mirrorOverlay = false;
+const poseSelfieMode = false;
 
 window.realtimeAccuracy = true;
 window.latestPoseLandmarks = null;
@@ -40,6 +41,8 @@ const poseConnectionsFallback = [
   [0, 1], [1, 2], [2, 3], [3, 7], [0, 4], [4, 5], [5, 6], [6, 8],
   [11, 12], [23, 24]
 ];
+
+console.log('camera_tracking loaded', { mirrorVideo, mirrorOverlay, poseSelfieMode });
 
 function updateStatus(message, isError = false) {
   if (statusElement) {
@@ -112,10 +115,10 @@ function initPose() {
 
 function toCanvasPoint(landmark) {
   const x = (landmark.x || 0) * canvasElement.width;
-  const shouldFlipX = mirrorMode !== poseSelfieMode;
+  const y = (landmark.y || 0) * canvasElement.height;
   return {
-    x: shouldFlipX ? canvasElement.width - x : x,
-    y: (landmark.y || 0) * canvasElement.height
+    x: mirrorOverlay ? canvasElement.width - x : x,
+    y
   };
 }
 
@@ -157,16 +160,14 @@ function drawVideoFrame() {
     canvasElement.width = videoElement.videoWidth;
     canvasElement.height = videoElement.videoHeight;
   }
+  canvasCtx.setTransform(1, 0, 0, 1, 0, 0);
   canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
   canvasCtx.save();
-  if (mirrorMode) {
-    canvasCtx.setTransform(-1, 0, 0, 1, canvasElement.width, 0);
-  }
   canvasCtx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
-  canvasCtx.restore();
   if (latestRawLandmarks && latestRawLandmarks.length) {
     drawPoseLandmarks(latestRawLandmarks);
   }
+  canvasCtx.restore();
 }
 
 async function getCameraStream() {
@@ -186,6 +187,8 @@ async function startCamera() {
     mediaStream = await getCameraStream();
     videoElement.srcObject = mediaStream;
     await videoElement.play();
+    if (videoElement) videoElement.style.transform = 'none';
+    if (canvasElement) canvasElement.style.transform = 'none';
     isRunning = true;
     updateStatus('Kamera aktif. Menunggu deteksi...');
     if (typeof startAccuracyDetection === 'function') startAccuracyDetection();

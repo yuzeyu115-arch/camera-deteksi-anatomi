@@ -296,6 +296,8 @@
       opacity: 0;
       pointer-events: none;
       z-index: 0;
+      transform: none !important;
+      -webkit-transform: none !important;
     }
     canvas {
       position: absolute;
@@ -305,6 +307,8 @@
       display: block;
       background: transparent;
       z-index: 1;
+      transform: none !important;
+      -webkit-transform: none !important;
     }
     .grid-2 {
       display: grid;
@@ -1072,7 +1076,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
   <script src="pose-tracker-enhanced.js"></script>
   <script src="enhanced-ui.js"></script>
-  <script src="camera_tracking.js"></script>
+  <script src="camera_tracking.js?v=7"></script>
   <script src="accuracy-detection-manager.js"></script>
 </body>
 </html>

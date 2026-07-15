@@ -135,6 +135,7 @@ Changes:
 | Git Commit | ✅ Complete | Commit 216f9dc |
 | GitHub Push | ✅ Complete | Pushed to origin/main |
 | Documentation | ✅ Complete | README updated |
+| GitHub Pages Custom Domain | ⚠️ Pending DNS | Add CNAME and configure domain DNS |
 
 ## 📝 What's New
 
@@ -186,6 +187,29 @@ Lengkap dokumentasi tersedia di README.md termasuk:
 3. **Responsive Layout** - Automatic adaptation to screen size
 4. **Professional Code** - Well-organized with media queries
 5. **Full Git Integration** - All changes tracked and pushed
+
+## 🌐 GitHub Pages Custom Domain Setup
+
+To make `camera.silaris.my.id` work with GitHub Pages:
+
+1. Create a file named `CNAME` in the repository root with:
+   ```
+   camera.silaris.my.id
+   ```
+2. Push the `CNAME` file to the `main` branch.
+3. In your domain DNS provider, add a CNAME record:
+   - Name: `camera`
+   - Value: `yuzeyu115-arch.github.io`
+4. Wait for DNS propagation (usually up to 30 minutes).
+5. Verify via browser: `https://camera.silaris.my.id`
+
+If your DNS provider does not allow CNAME on the root domain, use an A record instead pointing to GitHub Pages IPs:
+- `185.199.108.153`
+- `185.199.109.153`
+- `185.199.110.153`
+- `185.199.111.153`
+
+After DNS is correct, GitHub Pages should serve the project at your custom domain.
 
 ---
 

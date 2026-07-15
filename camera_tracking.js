@@ -25,7 +25,7 @@ let referenceLandmarks = null;
 let latestRawLandmarks = null;
 let poseSenderIntervalId = null;
 let lastAccuracyUpdate = 0;
-// Normal camera and skeleton orientation, no mirroring.
+// Keep camera preview and overlay in normal orientation (not mirrored).
 const mirrorVideo = false;
 const mirrorOverlay = false;
 const poseSelfieMode = false;
@@ -163,11 +163,17 @@ function drawVideoFrame() {
   canvasCtx.setTransform(1, 0, 0, 1, 0, 0);
   canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
   canvasCtx.save();
+  if (mirrorVideo) {
+    canvasCtx.setTransform(-1, 0, 0, 1, canvasElement.width, 0);
+  } else {
+    canvasCtx.setTransform(1, 0, 0, 1, 0, 0);
+  }
   canvasCtx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
+  canvasCtx.restore();
+
   if (latestRawLandmarks && latestRawLandmarks.length) {
     drawPoseLandmarks(latestRawLandmarks);
   }
-  canvasCtx.restore();
 }
 
 async function getCameraStream() {

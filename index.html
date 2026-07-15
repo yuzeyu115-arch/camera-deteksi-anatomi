@@ -3,10 +3,1043 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Camera Deteksi Anatomi</title>
-  <meta http-equiv="refresh" content="0; url=camera_tracking_browser.html" />
+  <title>Sistem Deteksi Anatomi & Tracking Terapi</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      display: flex;
+      background: linear-gradient(135deg, #0f0f1e 0%, #1a1a2e 100%);
+      color: #fff;
+      font-family: 'Poppins', Arial, sans-serif;
+    }
+    html {
+      height: 100%;
+      width: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      gap: 16px;
+      padding: 16px;
+    }
+    @media (max-width: 480px) {
+      .container {
+        padding: 0;
+        gap: 0;
+      }
+    }
+    .sidebar {
+      width: 280px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow-y: auto;
+      max-height: 100vh;
+      padding-bottom: 20px;
+    }
+    @media (max-width: 1024px) {
+      .container {
+        flex-direction: column;
+        padding: 12px;
+      }
+      .sidebar {
+        width: 100%;
+        max-height: none;
+        overflow-y: visible;
+        padding-bottom: 10px;
+      }
+    }
+    @media (max-width: 480px) {
+      .sidebar {
+        display: flex;
+        position: static;
+        width: 100%;
+        max-height: none;
+        overflow-y: visible;
+        z-index: auto;
+        padding: 8px;
+        gap: 8px;
+        background: linear-gradient(135deg, #0f0f1e 0%, #1a1a2e 100%);
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        order: 2;
+      }
+      .main-content {
+        gap: 12px;
+        order: 1;
+        padding-top: 0;
+      }
+      .container {
+        flex-direction: column;
+      }
+    }
+    .main-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    @media (max-width: 480px) {
+      .main-content {
+        gap: 12px;
+        padding-top: 0;
+      }
+    }
+    .title {
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: #6d5cff;
+    }
+    @media (max-width: 768px) {
+      .title {
+        font-size: 20px;
+        margin-bottom: 6px;
+      }
+    }
+    @media (max-width: 480px) {
+      .title {
+        font-size: 18px;
+      }
+    }
+    .section-card {
+      background: rgba(45, 45, 60, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 16px;
+      backdrop-filter: blur(10px);
+    }
+    @media (max-width: 768px) {
+      .section-card {
+        border-radius: 12px;
+        padding: 12px;
+      }
+    }
+    @media (max-width: 480px) {
+      .section-card {
+        border-radius: 10px;
+        padding: 10px;
+      }
+      .main-content > div:nth-child(1) {
+        padding: 0;
+        margin: -10px -10px 0 -10px;
+        background: transparent;
+        border: none;
+        box-shadow: none;
+      }
+      .main-content > div:nth-child(1) > .section-title {
+        display: none;
+      }
+    }
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #aaa;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+    }
+    @media (max-width: 768px) {
+      .section-title {
+        font-size: 12px;
+        margin-bottom: 10px;
+      }
+    }
+    .video-card {
+      position: relative;
+      border-radius: 16px;
+      overflow: hidden;
+      background: #000;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      min-height: 300px;
+    }
+    .camera-reference-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin-top: 20px;
+      padding: 18px;
+      border-radius: 16px;
+      background: rgba(18, 20, 45, 0.92);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      width: 100%;
+    }
+    .camera-reference-panel .camera-ref-image {
+      width: 100%;
+      height: 130px;
+      object-fit: cover;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: #111;
+    }
+    .camera-reference-panel .camera-accuracy-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0;
+      width: 100%;
+    }
+    .camera-reference-panel .camera-accuracy-panel > div {
+      color: #f6f8ff;
+    }
+    .camera-reference-panel .camera-accuracy-value {
+      font-size: 26px;
+      font-weight: 700;
+      color: #7c5bff;
+    }
+    .camera-accuracy-result {
+      color: #cfcfe1;
+      font-size: 13px;
+      margin-top: 4px;
+      line-height: 1.5;
+    }
+    @media (max-width: 768px) {
+      .camera-reference-panel {
+        gap: 12px;
+        padding: 16px;
+      }
+      .camera-reference-panel .camera-ref-image {
+        height: 120px;
+      }
+      .camera-accuracy-panel {
+        gap: 6px;
+      }
+    }
+    @media (max-width: 768px) {
+      .video-card {
+        aspect-ratio: unset;
+        min-height: 0;
+        height: 50vh;
+        max-height: 55vh;
+        border-radius: 18px;
+        margin: 0;
+        padding: 0;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+        position: relative;
+        width: 100%;
+      }
+      .main-content > .section-card:nth-child(2) {
+        margin-top: 0;
+      }
+      .overlay {
+        bottom: 16px;
+        left: 14px;
+        right: 14px;
+        font-size: 13px;
+        padding: 12px 14px;
+      }
+    }
+    @media (max-width: 480px) {
+      .video-card {
+        aspect-ratio: unset;
+        min-height: 320px;
+        height: min(52vh, 380px);
+        border-radius: 16px;
+        margin: 0;
+        padding: 0;
+        box-shadow: 0 18px 36px rgba(0, 0, 0, 0.22);
+        position: relative;
+        width: 100%;
+        overflow: hidden;
+      }
+      .main-content {        padding-top: 0;
+      }
+      .main-content > .section-card:nth-child(2) {
+        margin-top: 0;
+      }
+      .camera-accuracy-panel {
+        gap: 8px;
+      }
+      .overlay {
+        bottom: 16px;
+        left: 14px;
+        right: 14px;
+        font-size: 13px;
+        padding: 12px 14px;
+      }
+      .camera-actions {
+        flex-direction: column;
+      }
+      .camera-actions button {
+        width: 100%;
+      }
+      .reference-hint {
+        font-size: 12px;
+      }
+    }
+    video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 0;
+      transform: none !important;
+      -webkit-transform: none !important;
+    }
+    canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: transparent;
+      z-index: 1;
+      transform: none !important;
+      -webkit-transform: none !important;
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 768px) {
+      .grid-2 {
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+    }
+    .accuracy-display {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .accuracy-value {
+      font-size: 28px;
+      font-weight: 700;
+      text-align: center;
+      padding: 16px;
+      border-radius: 12px;
+      background: rgba(0, 0, 0, 0.3);
+    }
+    @media (max-width: 768px) {
+      .accuracy-value {
+        font-size: 24px;
+        padding: 12px;
+        border-radius: 10px;
+      }
+    }
+    @media (max-width: 480px) {
+      .accuracy-value {
+        font-size: 20px;
+        padding: 10px;
+        border-radius: 8px;
+      }
+    }
+    .accuracy-bar {
+      width: 100%;
+      height: 24px;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 999px;
+      overflow: hidden;
+      position: relative;
+    }
+    @media (max-width: 768px) {
+      .accuracy-bar {
+        height: 20px;
+      }
+    }
+    @media (max-width: 480px) {
+      .accuracy-bar {
+        height: 18px;
+      }
+    }
+    .accuracy-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #ef4444 0%, #eab308 50%, #22c55e 100%);
+      transition: width 0.3s ease;
+      border-radius: 999px;
+    }
+    .accuracy-label {
+      font-size: 12px;
+      color: #aaa;
+      text-align: center;
+    }
+    .distance-metrics {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .metric-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 8px;
+      font-size: 13px;
+    }
+    @media (max-width: 768px) {
+      .metric-item {
+        padding: 6px 10px;
+        font-size: 12px;
+        border-radius: 6px;
+      }
+    }
+    @media (max-width: 480px) {
+      .metric-item {
+        padding: 5px 8px;
+        font-size: 11px;
+        border-radius: 4px;
+      }
+    }
+    .metric-label {
+      color: #aaa;
+    }
+    .metric-value {
+      font-weight: 600;
+      color: #6d5cff;
+    }
+    .select-field {
+      width: 100%;
+      padding: 10px 12px;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      color: #fff;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .select-field:focus {
+      outline: none;
+      border-color: #6d5cff;
+      box-shadow: 0 0 0 2px rgba(109, 92, 255, 0.2);
+    }
+    @media (max-width: 768px) {
+      .select-field {
+        padding: 8px 10px;
+        font-size: 12px;
+        border-radius: 6px;
+      }
+    }
+    @media (max-width: 480px) {
+      .select-field {
+        padding: 7px 8px;
+        font-size: 11px;
+        border-radius: 4px;
+      }
+    }
+    .patient-info {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .info-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 8px;
+      font-size: 13px;
+    }
+    .info-label {
+      color: #aaa;
+      min-width: 80px;
+    }
+    .info-value {
+      flex: 1;
+      color: #fff;
+      font-weight: 500;
+    }
+    .chart-container {
+      position: relative;
+      height: 200px;
+    }
+    .button-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .app-shell {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      padding: 16px;
+    }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 20px;
+      border-radius: 16px;
+      background: rgba(45, 45, 60, 0.75);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(10px);
+    }
+    .page-heading {
+      font-size: 24px;
+      font-weight: 700;
+      color: #6d5cff;
+      margin-bottom: 4px;
+    }
+    .page-subtitle {
+      color: #aaa;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .tab-switch {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .app-shell {
+      width: 100%;
+      max-width: 1400px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      padding: 16px;
+    }
+    .tab-btn {
+      min-width: 140px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.07);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.08);
+      cursor: pointer;
+    }
+    .tab-btn.active {
+      background: linear-gradient(135deg, #6d5cff, #8b7cff);
+      box-shadow: 0 8px 20px rgba(109,92,255,0.25);
+    }
+    .page-panel {
+      display: none;
+      width: 100%;
+    }
+    .page-panel.active {
+      display: block;
+    }
+    .divider {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent);
+      margin: 12px 0;
+    }
+    .camera-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+    .reference-hint {
+      margin-top: 10px;
+      font-size: 12px;
+      color: #7ee7ff;
+      line-height: 1.5;
+    }
+    .upload-box {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 16px;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.06);
+      border: 1px dashed rgba(255,255,255,0.2);
+      color: #fff;
+      cursor: pointer;
+      width: 100%;
+      margin-bottom: 8px;
+    }
+    .upload-box input {
+      display: none;
+    }
+    .admin-hint {
+      color: #aaa;
+      font-size: 12px;
+      margin-bottom: 12px;
+    }
+    .gallery-strip {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 6px 0;
+    }
+    .gallery-strip img,
+    .gallery-grid img {
+      border-radius: 10px;
+      object-fit: cover;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: #000;
+    }
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 10px;
+    }
+    .gallery-item {
+      padding: 8px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .gallery-item img {
+      width: 100%;
+      height: 110px;
+      display: block;
+      margin-bottom: 6px;
+    }
+    .gallery-item .gallery-name {
+      font-size: 11px;
+      color: #ddd;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .history-card {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 14px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .history-title {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #e2e8f0;
+    }
+    .history-detail {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      font-size: 12px;
+      color: #cbd5e1;
+    }
+    .history-note {
+      font-size: 12px;
+      color: #f8fafc;
+      background: rgba(255, 255, 255, 0.04);
+      border-radius: 10px;
+      padding: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    @media (max-width: 1200px) {
+      .container {
+        flex-direction: column;
+      }
+      .sidebar {
+        width: 100%;
+        max-height: none;
+      }
+    }
+    .camera-accuracy-panel {
+      display: grid;
+      gap: 8px;
+      color: #fff;
+    }
+    .camera-accuracy-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #9ca3af;
+    }
+    .camera-accuracy-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: #6d5cff;
+    }
+    .camera-accuracy-result {
+      font-size: 13px;
+      color: #d1d5db;
+      line-height: 1.5;
+    }
+    .overlay {
+      position: absolute;
+      left: 16px;
+      right: 16px;
+      bottom: 18px;
+      padding: 14px 18px;
+      border-radius: 12px;
+      box-sizing: border-box;
+      backdrop-filter: blur(12px);
+      background: rgba(18, 18, 18, 0.85);
+      color: #fff;
+      font-size: 14px;
+      text-align: center;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    button {
+      border: none;
+      border-radius: 8px;
+      padding: 10px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      min-width: 120px;
+    }
+    @media (max-width: 768px) {
+      button {
+        padding: 8px 12px;
+        font-size: 12px;
+        min-width: 100px;
+        border-radius: 6px;
+      }
+    }
+    @media (max-width: 480px) {
+      button {
+        padding: 6px 10px;
+        font-size: 11px;
+        min-width: 80px;
+        border-radius: 4px;
+      }
+    }
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+    }
+    .button-start {
+      background: #6d5cff;
+      color: #fff;
+      box-shadow: 0 8px 20px rgba(109, 92, 255, 0.2);
+    }
+    .button-start:hover {
+      background: #7a69ff;
+    }
+    .button-pause {
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .button-pause:hover {
+      background: rgba(255, 255, 255, 0.12);
+    }
+    .button-danger {
+      background: #ef4444;
+      color: #fff;
+    }
+    .button-danger:hover {
+      background: #f87171;
+    }
+    .footer {
+      margin-top: 16px;
+      text-align: center;
+      color: #666;
+      font-size: 12px;
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.02);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+    canvas {
+      max-width: 100%;
+      height: auto;
+    }
+    @media (max-width: 480px) {
+      .container {
+        flex-direction: column;
+        padding: 10px 12px 12px;
+        gap: 12px;
+      }
+      .sidebar {
+        width: 100%;
+        max-height: none;
+        overflow: visible;
+        padding: 0;
+      }
+      .main-content {
+        width: 100%;
+        gap: 12px;
+        padding-bottom: 12px;
+      }
+      .page-heading {
+        font-size: 20px;
+      }
+      .page-subtitle {
+        font-size: 12px;
+      }
+      .topbar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+      }
+      .tab-switch {
+        width: 100%;
+        display: flex;
+        flex-wrap: wrap;
+      }
+      .tab-btn {
+        flex: 1;
+        width: 100%;
+        min-width: unset;
+      }
+      .video-card {
+        aspect-ratio: unset;
+        min-height: 0;
+        height: 58vh;
+        max-height: 58vh;
+        border-radius: 18px;
+        margin: 0;
+        padding: 0;
+        box-shadow: 0 18px 42px rgba(0, 0, 0, 0.35);
+        position: relative;
+        width: 100%;
+        overflow: hidden;
+      }
+      .camera-reference-panel {
+        width: calc(100% - 28px);
+        left: 14px;
+        right: 14px;
+      }
+      .camera-accuracy-panel {
+        gap: 8px;
+      }
+      .camera-ref-image {
+        height: 100px;
+      }
+      .overlay {
+        bottom: 14px;
+        left: 14px;
+        right: 14px;
+        font-size: 13px;
+        padding: 12px 14px;
+      }
+      .camera-actions {
+        flex-direction: column;
+        gap: 10px;
+      }
+      .camera-actions button {
+        width: 100%;
+      }
+      .reference-hint {
+        font-size: 12px;
+      }
+      .section-card {
+        padding: 14px;
+        border-radius: 16px;
+      }
+      .patient-info,
+      .distance-metrics,
+      .gallery-grid,
+      .history-detail {
+        gap: 8px;
+      }
+      .gallery-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .gallery-item img {
+        height: 100px;
+      }
+      .history-detail {
+        grid-template-columns: 1fr;
+      }
+      .metric-item,
+      .select-field,
+      .upload-box,
+      .gallery-item,
+      .history-card {
+        font-size: 12px;
+      }
+    }
+  </style>
 </head>
 <body>
-  <p>Loading Camera Deteksi Anatomi... <a href="camera_tracking_browser.html">Klik di sini jika tidak otomatis</a>.</p>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <div class="page-heading">HALAMAN PASIEN</div>
+        <p class="page-subtitle">Isi data pasien, pilih opsi terapi, lihat layar kamera, lalu lihat pencocokan langsung dari foto referensi.</p>
+      </div>
+      <div class="tab-switch" role="tablist" aria-label="Navigasi halaman">
+        <button id="patientTabBtn" class="tab-btn active" type="button">HALAMAN PASIEN</button>
+        <button id="adminTabBtn" class="tab-btn" type="button">HALAMAN ADMIN</button>
+      </div>
+    </header>
+
+    <div id="patientPage" class="page-panel active">
+      <div class="container">
+        <div class="sidebar">
+          <div class="section-card">
+            <div class="section-title">� Foto Referensi</div>
+            <div id="cameraReferencePanel" class="camera-reference-panel">
+              <img id="cameraRefImage" class="camera-ref-image" src="" alt="Referensi" />
+              <div id="cameraAccuracyPanel" class="camera-accuracy-panel">
+                <div id="cameraAccuracyLabel">AKURASI DETEKSI</div>
+                <div id="cameraAccuracyValue" class="camera-accuracy-value">0.0%</div>
+                <div id="cameraAccuracyResult" class="camera-accuracy-result">Pilih aksi terapi dan sendi untuk memuat referensi.</div>
+                <div id="accuracyReferenceStatus" class="accuracy-reference-status" style="font-size: 11px; color: #ff6b6b; margin-top: 8px;">❌ No Reference</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-card">
+            <div class="section-title">👤 Data Pasien</div>
+            <div class="patient-info">
+              <input type="text" id="patientName" class="select-field" placeholder="Nama Pasien" />
+              <input type="text" id="patientAge" class="select-field" placeholder="Usia" />
+              <input type="text" id="therapySession" class="select-field" placeholder="Sesi #1" />
+              <input type="date" id="sessionDate" class="select-field" />
+            </div>
+            <div class="divider"></div>
+            <div class="section-title">⚙️ Opsi Aksi Terapi</div>
+            <select id="therapyAction" class="select-field">
+              <option value="">Pilih Aksi Terapi</option>
+              <option value="posture">Perbaikan Postur</option>
+              <option value="range">Rentang Gerak Sendi</option>
+              <option value="strength">Latihan Kekuatan</option>
+              <option value="balance">Keseimbangan</option>
+              <option value="flexibility">Fleksibilitas</option>
+              <option value="gait">Analisis Berjalan</option>
+              <option value="coordination">Koordinasi Gerakan</option>
+            </select>
+            <div class="divider"></div>
+            <div class="section-title">🦴 Pergerakan Sendi</div>
+            <select id="jointMovement" class="select-field">
+              <option value="">Pilih Sendi</option>
+              <option value="shoulder">Bahu (Shoulder)</option>
+              <option value="elbow">Siku (Elbow)</option>
+              <option value="wrist">Pergelangan Tangan</option>
+              <option value="hip">Pinggul (Hip)</option>
+              <option value="knee">Lutut (Knee)</option>
+              <option value="ankle">Pergelangan Kaki</option>
+              <option value="neck">Leher (Neck)</option>
+              <option value="spine">Tulang Belakang</option>
+            </select>
+            <div class="divider"></div>
+          </div>
+
+        </div>
+
+        <div class="main-content">
+          <div class="section-card">
+            <div class="section-title">📹 Layar Kamera</div>
+            <div class="video-card">
+              <video id="input_video" playsinline autoplay muted></video>
+              <canvas id="output_canvas"></canvas>
+              <div id="status" class="overlay">Klik "Mulai" untuk mengaktifkan kamera.</div>
+            </div>
+            <div class="camera-actions">
+              <button id="startBtnSecondary" class="button-start" type="button">▶️ Mulai</button>
+              <button id="stopBtnSecondary" class="button-pause" type="button">⏹️ Berhenti</button>
+            </div>
+            <div class="reference-hint">Foto referensi digunakan sebagai acuan, lalu pencocokan langsung muncul di layar kamera saat deteksi berjalan.</div>
+          </div>
+
+          <div class="section-card">
+            <div class="section-title">📌 Ringkasan Pemantauan</div>
+            <div class="distance-metrics">
+              <div class="metric-item"><span class="metric-label">Aksi Terapi</span><span class="metric-value" id="summaryTherapy">-</span></div>
+              <div class="metric-item"><span class="metric-label">Hasil Terapi</span><span class="metric-value" id="summaryResult">-</span></div>
+              <div class="metric-item"><span class="metric-label">Sendi Dipantau</span><span class="metric-value" id="summaryJoint">-</span></div>
+            </div>
+          </div>
+
+          <div class="section-card">
+            <div class="section-title">📏 Metrik Jarak Sendi</div>
+            <div class="distance-metrics">
+              <div class="metric-item">
+                <span class="metric-label">Jarak Referensi:</span>
+                <span class="metric-value" id="distRef">--</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Jarak Saat Ini:</span>
+                <span class="metric-value" id="distCurrent">--</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Perbedaan:</span>
+                <span class="metric-value" id="distDiff">--</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Nilai Kecocokan:</span>
+                <span class="metric-value" id="matchScore">0/100</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-card">
+            <div class="section-title">📋 Hasil Sesi Pasien</div>
+            <div class="distance-metrics">
+              <div class="metric-item">
+                <span class="metric-label">Status Sesi</span>
+                <span class="metric-value" id="sessionStatus">Menunggu</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Akurasi Akhir</span>
+                <span class="metric-value" id="sessionAccuracy">--</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Rekomendasi Terapis</span>
+                <span class="metric-value" id="sessionRecommendation">Tunggu hasil deteksi.</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Aksi Terapi</span>
+                <span class="metric-value" id="sessionAction">-</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="adminPage" class="page-panel">
+      <div class="section-card">
+        <div class="section-title">🛠️ HALAMAN ADMIN</div>
+        <div class="section-title">📷 Foto Referensi 15-20 Foto</div>
+        <label class="upload-box">
+          <input id="adminRefUpload" type="file" accept="image/*" multiple />
+          <span>Unggah 15-20 foto referensi</span>
+        </label>
+        <div class="admin-hint">Foto yang diunggah akan tampil di galeri admin dan dapat dipakai sebagai acuan pencocokan.</div>
+        <div class="divider"></div>
+        <div class="section-title">🏁 Opsi Hasil Terapi</div>
+        <select id="therapyResult" class="select-field">
+          <option value="">Pilih Hasil Terapi</option>
+          <option value="baik">Baik</option>
+          <option value="cukup">Cukup</option>
+          <option value="perlu-perbaikan">Perlu Perbaikan</option>
+        </select>
+        <div class="divider"></div>
+        <div class="section-title">🖼️ Galeri Foto Tersimpan</div>
+        <div id="adminGallery" class="gallery-grid"></div>
+        <div class="divider"></div>
+        <div class="section-title">📜 Riwayat Sesi Pasien</div>
+        <div id="sessionHistoryList"></div>
+        <button id="clearHistoryBtn" class="button-danger" type="button">Hapus Riwayat</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js/dist/chart.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+  <script src="pose-tracker-enhanced.js"></script>
+  <script src="enhanced-ui.js"></script>
+  <script src="camera_tracking.js?v=8"></script>
+  <script src="accuracy-detection-manager.js"></script>
 </body>
 </html>

@@ -5,6 +5,7 @@ const statusElement = document.getElementById('status');
 const startBtn = document.getElementById('startBtnSecondary');
 const stopBtn = document.getElementById('stopBtnSecondary');
 const adminRefUpload = document.getElementById('adminRefUpload');
+const adminGallery = document.getElementById('adminGallery');
 const cameraRefImage = document.getElementById('cameraRefImage');
 const cameraAccuracyValue = document.getElementById('cameraAccuracyValue');
 const cameraAccuracyResult = document.getElementById('cameraAccuracyResult');
@@ -16,6 +17,7 @@ const adminPage = document.getElementById('adminPage');
 const therapyAction = document.getElementById('therapyAction');
 const jointMovement = document.getElementById('jointMovement');
 const sessionAccuracy = document.getElementById('sessionAccuracy');
+const MAX_SAVED_REFS = 50;
 
 let mediaStream = null;
 let isRunning = false;
@@ -62,8 +64,81 @@ function updateAccuracyUI(percent) {
 
 function setReferenceStatus(hasReference) {
   if (!accuracyReferenceStatus) return;
-  accuracyReferenceStatus.textContent = hasReference ? '? Reference Loaded' : '? No Reference';
+  accuracyReferenceStatus.textContent = hasReference ? '✅ Reference Loaded' : '❌ No Reference';
   accuracyReferenceStatus.style.color = hasReference ? '#22c55e' : '#ef4444';
+}
+
+function getSavedReferenceImages() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('savedPoseRefs') || '[]');
+    if (!Array.isArray(saved)) return [];
+    return saved.map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const image = item.image || item.src || item.dataUrl || item.url || '';
+      if (!image) return null;
+      return {
+        image,
+        name: item.name || item.title || `Foto Referensi ${Math.floor(Math.random() * 1000)}`,
+        uploadedAt: item.uploadedAt || item.createdAt || new Date().toISOString()
+      };
+    }).filter(Boolean);
+  } catch (error) {
+    console.warn('getSavedReferenceImages error', error);
+    return [];
+  }
+}
+
+function setSavedReferenceImages(images) {
+  try {
+    localStorage.setItem('savedPoseRefs', JSON.stringify(images.slice(0, MAX_SAVED_REFS)));
+  } catch (error) {
+    console.warn('setSavedReferenceImages error', error);
+  }
+}
+
+function renderAdminGallery() {
+  if (!adminGallery) return;
+  const saved = getSavedReferenceImages();
+  adminGallery.innerHTML = '';
+  if (!saved.length) {
+    const emptyItem = document.createElement('div');
+    emptyItem.className = 'gallery-item';
+    emptyItem.innerHTML = '<div class="gallery-name">Belum ada foto tersimpan.</div>';
+    adminGallery.appendChild(emptyItem);
+    return;
+  }
+
+  saved.forEach((item, index) => {
+    const card = document.createElement('div');
+    card.className = 'gallery-item';
+
+    const img = document.createElement('img');
+    img.src = item.image;
+    img.alt = item.name || `Foto Referensi ${index + 1}`;
+    img.addEventListener('click', () => {
+      loadReferenceFromDataUrl(item.image);
+      updateStatus(`Foto referensi #${index + 1} dimuat dari galeri.`);
+    });
+
+    const label = document.createElement('div');
+    label.className = 'gallery-name';
+    label.textContent = item.name || `Foto ${index + 1}`;
+
+    card.appendChild(img);
+    card.appendChild(label);
+    adminGallery.appendChild(card);
+  });
+}
+
+function saveReferenceImage(dataUrl, fileName) {
+  const saved = getSavedReferenceImages();
+  saved.push({
+    image: dataUrl,
+    name: fileName || `Foto Referensi ${saved.length + 1}`,
+    uploadedAt: new Date().toISOString()
+  });
+  setSavedReferenceImages(saved);
+  renderAdminGallery();
 }
 
 function switchPage(target) {
@@ -125,9 +200,11 @@ function toCanvasPoint(landmark) {
 function drawPoseLandmarks(landmarks) {
   if (!canvasCtx || !landmarks || !landmarks.length) return;
   canvasCtx.save();
-  canvasCtx.lineWidth = 2;
-  canvasCtx.strokeStyle = 'rgba(124,252,0,0.95)';
-  canvasCtx.fillStyle = '#ff4d6d';
+  canvasCtx.lineWidth = 3;
+  canvasCtx.strokeStyle = 'rgba(67, 221, 255, 0.98)';
+  canvasCtx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+  canvasCtx.shadowBlur = 8;
+  canvasCtx.shadowColor = 'rgba(0, 255, 255, 0.6)';
 
   const connections = window.POSE_CONNECTIONS || poseConnectionsFallback;
   connections.forEach(([i, j]) => {
@@ -143,11 +220,12 @@ function drawPoseLandmarks(landmarks) {
   });
 
   landmarks.forEach((lm) => {
-    if (!lm) return;
+    if (!lm || typeof lm.x !== 'number' || typeof lm.y !== 'number') return;
     const p = toCanvasPoint(lm);
     canvasCtx.beginPath();
-    canvasCtx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+    canvasCtx.arc(p.x, p.y, 5, 0, Math.PI * 2);
     canvasCtx.fill();
+    canvasCtx.stroke();
   });
 
   canvasCtx.restore();
@@ -199,6 +277,9 @@ async function startCamera() {
     updateStatus('Kamera aktif. Menunggu deteksi...');
     if (typeof startAccuracyDetection === 'function') startAccuracyDetection();
     requestAnimationFrame(stepCamera);
+    if (videoElement.readyState >= 2 && pose && typeof pose.send === 'function') {
+      pose.send({ image: videoElement });
+    }
     if (pose && typeof pose.send === 'function') {
       if (poseSenderIntervalId) clearInterval(poseSenderIntervalId);
       poseSenderIntervalId = setInterval(() => {
@@ -239,7 +320,11 @@ function stepCamera() {
 
 function onResults(results) {
   if (!results) return;
-  latestRawLandmarks = results.poseLandmarks || null;
+  let liveLandmarks = results.poseLandmarks || null;
+  if (window.applyPoseTrackingEnhancements) {
+    liveLandmarks = window.applyPoseTrackingEnhancements(liveLandmarks);
+  }
+  latestRawLandmarks = liveLandmarks;
   window.latestRawLandmarks = latestRawLandmarks;
   window.latestPoseLandmarks = latestRawLandmarks;
 
@@ -352,14 +437,23 @@ function initUI() {
     adminRefUpload.addEventListener('change', async (e) => {
       const files = e.target.files;
       if (!files || files.length === 0) return;
-      const file = files[0];
-      if (!file.type.startsWith('image/')) return updateStatus('Pilih file gambar.', true);
-      try {
-        const dataUrl = await readFileAsDataURL(file);
-        loadReferenceFromDataUrl(dataUrl);
-      } catch (err) {
-        updateStatus('Gagal membaca file referensi.', true);
+
+      let firstLoaded = false;
+      for (const file of files) {
+        if (!file.type.startsWith('image/')) continue;
+        try {
+          const dataUrl = await readFileAsDataURL(file);
+          saveReferenceImage(dataUrl, file.name || `Foto ${Date.now()}`);
+          if (!firstLoaded) {
+            loadReferenceFromDataUrl(dataUrl);
+            firstLoaded = true;
+          }
+        } catch (err) {
+          console.warn('Failed upload file', file.name, err);
+        }
       }
+      adminRefUpload.value = '';
+      updateStatus('Foto referensi disimpan ke galeri. Pilih foto untuk memuat acuan.');
     });
   }
 }
@@ -367,6 +461,7 @@ function initUI() {
 document.addEventListener('DOMContentLoaded', () => {
   initPose();
   initUI();
+  renderAdminGallery();
   autoLoadFirstReference();
   if (statusElement) statusElement.style.display = 'block';
 });

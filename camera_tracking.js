@@ -141,6 +141,11 @@ function saveReferenceImage(dataUrl, fileName) {
   renderAdminGallery();
 }
 
+window.getSavedReferenceImages = getSavedReferenceImages;
+window.setSavedReferenceImages = setSavedReferenceImages;
+window.saveReferenceImage = saveReferenceImage;
+window.renderAdminGallery = renderAdminGallery;
+
 function switchPage(target) {
   if (patientPage && adminPage) {
     patientPage.classList.toggle('active', target === 'patient');
